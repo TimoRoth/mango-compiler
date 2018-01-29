@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Mango VM &ndash; Language Reference</title>
+  <link href="https://fonts.googleapis.com/css?family=Source+Code+Pro|Source+Sans+Pro|Source+Serif+Pro" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Source Sans Pro', sans-serif;
+      font-size: 15px;
+      margin: 2em 1em 8em;
+    }
+
+    main {
+      display: block;
+      line-height: 1.6;
+      margin: 0 auto;
+      max-width: 30em;
+    }
+
+    h1, h2, h3 {
+      font-family: 'Source Serif Pro', serif;
+      font-weight: normal;
+      margin: 1.5em 0 0.5em;
+    }
+
+    .table, .transition {
+      text-align: center;
+    }
+
+    pre, code {
+      font-family: 'Source Code Pro', monospace;
+      font-size: 1em;
+    }
+
+    pre {
+      background: #fcfcfc;
+      border: 1px solid #f0f0f0;
+      border-radius: .3em;
+      color: #8e908c;
+      line-height: 1.3;
+      padding: .6em;
+    }
+
+    .i, .p {
+      color: #000000;
+    }
+
+    .I {
+      color: #718c00;
+    }
+
+    .k {
+      color: #4271ae;
+    }
+
+    .b {
+      text-decoration: underline;
+      text-decoration-color: #c82829;
+      text-decoration-style: wavy;
+      text-underline-position: under;
+    }
+
+    .n {
+      color: #eab700;
+    }
+
+    .s {
+      color: #f5871f;
+    }
+
+    a:link, a:visited {
+      color: #3e999f;
+      text-decoration: none;
+    }
+
+    a:active, a:hover {
+      color: #3e999f;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Mango VM &ndash; Language Reference</h1>
+    <ul>
+      <li><a href="#data-types">Data Types</a></li>
+      <li><a href="#modules">Modules</a><ul><li><a href="#imports">Imports</a></li></ul></li>
+      <li><a href="#types">Types</a></li>
+      <li><a href="#functions">Functions</a><ul><li><a href="#extern">Extern Functions</a></li></ul></li>
+      <li><a href="#example">Example</a></li>
+      <li><a href="#instructions">Instructions</a><ul><li><a href="#stack">Stack</a></li><li><a href="#arithmetic">Arithmetic</a></li><li><a href="#bitwise">Bitwise</a></li><li><a href="#shift">Shift</a></li><li><a href="#conversion">Conversion</a></li><li><a href="#comparison">Comparison</a></li><li><a href="#branches">Branches</a></li><li><a href="#calls">Calls</a></li><li><a href="#references">References</a></li><li><a href="#arguments">Arguments</a></li><li><a href="#locals">Local Variables</a></li><li><a href="#fields">Fields</a></li><li><a href="#elements">Elements</a></li><li><a href="#constants">Constants</a></li></ul></li>
+    </ul>
+    <h2 id="data-types">Data Types</h2>
+    <ul>
+      <li><code><span class="k">bool</span></code> &ndash; a Boolean value</li>
+      <li><code><span class="k">i8</span></code> &ndash; an 8-bit signed integer</li>
+      <li><code><span class="k">i16</span></code> &ndash; a 16-bit signed integer</li>
+      <li><code><span class="k">i32</span></code> &ndash; a 32-bit signed integer</li>
+      <li><code><span class="k">i64</span></code> &ndash; a 64-bit signed integer</li>
+      <li><code><span class="k">u8</span></code> &ndash; an 8-bit unsigned integer</li>
+      <li><code><span class="k">u16</span></code> &ndash; a 16-bit unsigned integer</li>
+      <li><code><span class="k">u32</span></code> &ndash; a 32-bit unsigned integer</li>
+      <li><code><span class="k">u64</span></code> &ndash; a 64-bit unsigned integer</li>
+      <li><code><span class="k">f32</span></code> &ndash; a single-precision floating-point number</li>
+      <li><code><span class="k">f64</span></code> &ndash; a double-precision floating-point number</li>
+      <li><code><span class="k">void</span></code> &ndash; no type (only allowed as a return type)</li>
+      <li><code><span class="I">T</span><span class="p">&amp;</span></code> &ndash; a reference</li>
+      <li><code><span class="I">T</span><span class="p">[</span><span class="i">n</span><span class="p">]</span></code> &ndash; a fixed-length array</li>
+      <li><code><span class="I">T</span><span class="p">[</span><span class="p">]</span></code> &ndash; a slice of an array</li>
+      <li><code><span class="I">T</span><span class="p">(</span><span class="I">T0</span><span class="p">,</span> <span class="I">T1</span><span class="p">,</span> <span class="p">...</span> <span class="I">Tn</span><span class="p">)</span></code> &ndash; a function pointer</li>
+      <li>user-defined types</li>
+    </ul>
+    <h2 id="modules">Modules</h2>
+    <p>A module is a collection of types and functions and the smallest unit of deployment.</p>
+    <pre><span class="k">module</span> <span class="I">Program</span>&NewLine;<span class="p">{</span>&NewLine;  <span class="k">define</span> <span class="k">void</span> <span class="i">@main</span><span class="p">(</span><span class="p">)</span>&NewLine;  <span class="p">{</span>&NewLine;    <span class="k">ret</span>&NewLine;  <span class="p">}</span>&NewLine;<span class="p">}</span>&NewLine;</pre>
+    <p>A source file can contain zero or more modules.</p>
+    <h3 id="imports">Imports</h3>
+    <p>A module that calls functions in other modules must import those modules. Types from other modules can be used without importing them.</p>
+    <pre><span class="k">module</span> <span class="I">Program</span>&NewLine;<span class="p">{</span>&NewLine;  <span class="k">import</span> <span class="I">Fibonacci</span>&NewLine;&NewLine;  <span class="k">define</span> <span class="k">void</span> <span class="i">@main</span><span class="p">(</span><span class="p">)</span>&NewLine;  <span class="p">{</span>&NewLine;    <span class="k">ldc</span>     <span class="k">i32</span> <span class="n">23</span>&NewLine;    <span class="k">call</span>    <span class="k">i32</span> <span class="p">&lt;</span><span class="I">Fibonacci</span><span class="p">&gt;</span> <span class="i">@recursive</span><span class="p">(</span><span class="k">i32</span><span class="p">)</span>&NewLine;//  call    i32 &lt;Fibonacci&gt; @iterative(i32)&NewLine;    <span class="k">break</span>&NewLine;    <span class="k">pop</span>&NewLine;    <span class="k">ret</span>&NewLine;  <span class="p">}</span>&NewLine;<span class="p">}</span>&NewLine;</pre>
+    <h2 id="types">Types</h2>
+    <p>A structured type consists of zero or more fields.</p>
+    <pre><span class="k">module</span> <span class="I">Canvas</span>&NewLine;<span class="p">{</span>&NewLine;  <span class="k">type</span> <span class="I">Point2D</span>&NewLine;  <span class="p">{</span>&NewLine;    <span class="k">field</span> <span class="k">i32</span> <span class="i">$x</span>&NewLine;    <span class="k">field</span> <span class="k">i32</span> <span class="i">$y</span>&NewLine;  <span class="p">}</span>&NewLine;<span class="p">}</span>&NewLine;</pre>
+    <h2 id="functions">Functions</h2>
+    <p>A function has a name, a return type, zero or more parameters, and a function body.</p>
+    <pre><span class="k">module</span> <span class="I">Math</span>&NewLine;<span class="p">{</span>&NewLine;  <span class="k">define</span> <span class="k">i32</span> <span class="i">@max</span><span class="p">(</span><span class="k">i32</span> <span class="i">%a</span><span class="p">,</span> <span class="k">i32</span> <span class="i">%b</span><span class="p">)</span>&NewLine;  <span class="p">{</span>&NewLine;    <span class="k">ldarg</span> <span class="i">%a</span>&NewLine;    <span class="k">ldarg</span> <span class="i">%b</span>&NewLine;    <span class="k">blt.s</span> <span class="i">l1</span>&NewLine;&NewLine;    <span class="k">ldarg</span> <span class="i">%a</span>&NewLine;    <span class="k">ret</span>&NewLine;&NewLine;<span class="i">l1</span><span class="p">:</span> <span class="k">ldarg</span> <span class="i">%b</span>&NewLine;    <span class="k">ret</span>&NewLine;  <span class="p">}</span>&NewLine;<span class="p">}</span>&NewLine;</pre>
+    <p>The function body contains the declaration of local variables and one or more instructions.</p>
+    <h3 id="extern">Extern Functions</h3>
+    <p>A function can be defined externally.</p>
+    <pre><span class="k">module</span> <span class="I">Console</span>&NewLine;<span class="p">{</span>&NewLine;  <span class="k">declare</span> <span class="k">void</span> <span class="i">@write_line</span><span class="p">(</span><span class="k">i32</span> <span class="i">%value</span><span class="p">)</span> <span class="n">100</span>&NewLine;<span class="p">}</span></pre>
+    <p>Externally, these functions are identified by an ordinal number.</p>
+    <h2 id="example">Example</h2>
+    <pre><span class="k">module</span> <span class="I">Fibonacci</span>&NewLine;<span class="p">{</span>&NewLine;  <span class="k">define</span> <span class="k">i32</span> <span class="i">@iterative</span><span class="p">(</span><span class="k">i32</span> <span class="i">%n</span><span class="p">)</span>&NewLine;  <span class="p">{</span>&NewLine;    <span class="k">local</span> <span class="k">i32</span> <span class="i">%a</span>&NewLine;    <span class="k">local</span> <span class="k">i32</span> <span class="i">%b</span>&NewLine;    <span class="k">local</span> <span class="k">i32</span> <span class="i">%i</span>&NewLine;&NewLine;    <span class="k">ldc</span>     <span class="k">i32</span> <span class="n">0</span>&NewLine;    <span class="k">stloc</span>   <span class="i">%a</span>&NewLine;    <span class="k">ldc</span>     <span class="k">i32</span> <span class="n">1</span>&NewLine;    <span class="k">stloc</span>   <span class="i">%b</span>&NewLine;    <span class="k">ldc</span>     <span class="k">i32</span> <span class="n">0</span>&NewLine;    <span class="k">stloc</span>   <span class="i">%i</span>&NewLine;    <span class="k">br.s</span>    <span class="i">l2</span>&NewLine;&NewLine;<span class="i">l1</span><span class="p">:</span> <span class="k">ldloc</span>   <span class="i">%a</span>&NewLine;    <span class="k">ldloc</span>   <span class="i">%b</span>&NewLine;    <span class="k">stloc</span>   <span class="i">%a</span>&NewLine;    <span class="k">ldloc</span>   <span class="i">%b</span>&NewLine;    <span class="k">add</span>&NewLine;    <span class="k">stloc</span>   <span class="i">%b</span>&NewLine;    <span class="k">ldloc</span>   <span class="i">%i</span>&NewLine;    <span class="k">ldc</span>     <span class="k">i32</span> <span class="n">1</span>&NewLine;    <span class="k">add</span>&NewLine;    <span class="k">stloc</span>   <span class="i">%i</span>&NewLine;<span class="i">l2</span><span class="p">:</span> <span class="k">ldloc</span>   <span class="i">%i</span>&NewLine;    <span class="k">ldarg</span>   <span class="i">%n</span>&NewLine;    <span class="k">blt.s</span>   <span class="i">l1</span>&NewLine;&NewLine;    <span class="k">ldloc</span>   <span class="i">%a</span>&NewLine;    <span class="k">ret</span>&NewLine;  <span class="p">}</span>&NewLine;&NewLine;  <span class="k">define</span> <span class="k">i32</span> <span class="i">@recursive</span><span class="p">(</span><span class="k">i32</span> <span class="i">%n</span><span class="p">)</span>&NewLine;  <span class="p">{</span>&NewLine;    <span class="k">ldarg</span>   <span class="i">%n</span>&NewLine;    <span class="k">ldc</span>     <span class="k">i32</span> <span class="n">2</span>&NewLine;    <span class="k">bge.s</span>   <span class="i">l1</span>&NewLine;    &NewLine;    <span class="k">ldarg</span>   <span class="i">%n</span>&NewLine;    <span class="k">ret</span>&NewLine;&NewLine;<span class="i">l1</span><span class="p">:</span> <span class="k">ldarg</span>   <span class="i">%n</span>&NewLine;    <span class="k">ldc</span>     <span class="k">i32</span> <span class="n">1</span>&NewLine;    <span class="k">sub</span>&NewLine;    <span class="k">call</span>    <span class="k">i32</span> <span class="i">@recursive</span><span class="p">(</span><span class="k">i32</span><span class="p">)</span>&NewLine;    <span class="k">ldarg</span>   <span class="i">%n</span>&NewLine;    <span class="k">ldc</span>     <span class="k">i32</span> <span class="n">2</span>&NewLine;    <span class="k">sub</span>&NewLine;    <span class="k">call</span>    <span class="k">i32</span> <span class="i">@recursive</span><span class="p">(</span><span class="k">i32</span><span class="p">)</span>&NewLine;    <span class="k">add</span>&NewLine;    <span class="k">ret</span>&NewLine;  <span class="p">}</span>&NewLine;<span class="p">}</span>&NewLine;</pre>
+    <h2 id="instructions">Instructions</h2>
+    <pre><span class="k">nop</span>&NewLine;</pre>
+    <p>no operation</p>
+    <p class="transition">... &rarr; ...</p>
+    <pre><span class="k">break</span></pre>
+    <p>breakpoint</p>
+    <p class="transition">... &rarr; ...</p>
+    <h3 id="stack">Stack</h3>
+    <pre><span class="k">dup</span></pre>
+    <p>duplicate the top value of the stack</p>
+    <p class="transition">..., i32 &rarr; ..., i32, i32<br>..., i64 &rarr; ..., i64, i64<br>..., f32 &rarr; ..., f32, f32<br>..., f64 &rarr; ..., f64, f64<br>..., T&amp; &rarr; ..., T&amp;, T&amp;</p>
+    <pre><span class="k">pop</span></pre>
+    <p>remove the top element of the stack</p>
+    <p class="transition">..., i32 &rarr; ...<br>..., i64 &rarr; ...<br>..., f32 &rarr; ...<br>..., f64 &rarr; ...<br>..., T&amp; &rarr; ...</p>
+    <h3 id="arithmetic">Arithmetic</h3>
+    <pre><span class="k">add</span></pre>
+    <p>add values</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i64 &rarr; ..., i64<br>..., f32, f32 &rarr; ..., f32<br>..., f64, f64 &rarr; ..., f64</p>
+    <pre><span class="k">div</span></pre>
+    <p>divide values</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i64 &rarr; ..., i64<br>..., f32, f32 &rarr; ..., f32<br>..., f64, f64 &rarr; ..., f64</p>
+    <pre><span class="k">div.un</span></pre>
+    <p>divide integer values, unsigned</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i64 &rarr; ..., i64</p>
+    <pre><span class="k">mul</span></pre>
+    <p>multiply values</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i64 &rarr; ..., i64<br>..., f32, f32 &rarr; ..., f32<br>..., f64, f64 &rarr; ..., f64</p>
+    <pre><span class="k">rem</span></pre>
+    <p>compute remainder</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i64 &rarr; ..., i64<br>..., f32, f32 &rarr; ..., f32<br>..., f64, f64 &rarr; ..., f64</p>
+    <pre><span class="k">rem.un</span></pre>
+    <p>compute integer remainder, unsigned</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i64 &rarr; ..., i64</p>
+    <pre><span class="k">sub</span></pre>
+    <p>subtract values</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i64 &rarr; ..., i64<br>..., f32, f32 &rarr; ..., f32<br>..., f64, f64 &rarr; ..., f64</p>
+    <pre><span class="k">neg</span></pre>
+    <p>negate value</p>
+    <p class="transition">..., i32 &rarr; ..., i32<br>..., i64 &rarr; ..., i64<br>..., f32 &rarr; ..., f32<br>..., f64 &rarr; ..., f64</p>
+    <h3 id="bitwise">Bitwise</h3>
+    <pre><span class="k">and</span></pre>
+    <p>bitwise AND</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i64 &rarr; ..., i64</p>
+    <pre><span class="k">or</span></pre>
+    <p>bitwise OR</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i64 &rarr; ..., i64</p>
+    <pre><span class="k">xor</span></pre>
+    <p>bitwise XOR</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i64 &rarr; ..., i64</p>
+    <pre><span class="k">not</span></pre>
+    <p>bitwise complement</p>
+    <p class="transition">..., i32 &rarr; ..., i32<br>..., i64 &rarr; ..., i64</p>
+    <h3 id="shift">Shift</h3>
+    <pre><span class="k">shl</span></pre>
+    <p>shift integer left</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i32 &rarr; ..., i64</p>
+    <pre><span class="k">shr</span></pre>
+    <p>shift integer right</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i32 &rarr; ..., i64</p>
+    <pre><span class="k">shr.un</span></pre>
+    <p>shift integer right, unsigned</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i32 &rarr; ..., i64</p>
+    <h3 id="conversion">Conversion</h3>
+    <pre><span class="k">conv</span> <span class="k">i8</span>&NewLine;<span class="k">conv</span> <span class="k">i16</span>&NewLine;<span class="k">conv</span> <span class="k">i32</span>&NewLine;<span class="k">conv</span> <span class="k">i64</span>&NewLine;<span class="k">conv</span> <span class="k">u8</span>&NewLine;<span class="k">conv</span> <span class="k">u16</span>&NewLine;<span class="k">conv</span> <span class="k">u32</span>&NewLine;<span class="k">conv</span> <span class="k">u64</span>&NewLine;<span class="k">conv</span> <span class="k">f32</span>&NewLine;<span class="k">conv</span> <span class="k">f64</span></pre>
+    <p>convert value</p>
+    <p class="transition">..., i32 &rarr; ..., i32|i64|f32|f64<br>..., i64 &rarr; ..., i32|i64|f32|f64<br>..., f32 &rarr; ..., i32|i64|f32|f64<br>..., f64 &rarr; ..., i32|i64|f32|f64</p>
+    <pre><span class="k">conv.un</span> <span class="k">f32</span>&NewLine;<span class="k">conv.un</span> <span class="k">f64</span></pre>
+    <p>convert integer value, unsigned</p>
+    <p class="transition">..., i32 &rarr; ..., f32|f64<br>..., i64 &rarr; ..., f32|f64</p>
+    <h3 id="comparison">Comparison</h3>
+    <pre><span class="k">ceq</span></pre>
+    <p>compare equal</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i64 &rarr; ..., i32<br>..., f32, f32 &rarr; ..., i32<br>..., f64, f64 &rarr; ..., i32<br>..., T&amp;, T&amp; &rarr; ..., i32</p>
+    <pre><span class="k">cgt</span></pre>
+    <p>compare greater than</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i64 &rarr; ..., i32<br>..., f32, f32 &rarr; ..., i32<br>..., f64, f64 &rarr; ..., i32</p>
+    <pre><span class="k">cgt.un</span></pre>
+    <p>compare greater than, unsigned or unordered</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i64 &rarr; ..., i32<br>..., f32, f32 &rarr; ..., i32<br>..., f64, f64 &rarr; ..., i32</p>
+    <pre><span class="k">clt</span></pre>
+    <p>compare less than</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i64 &rarr; ..., i32<br>..., f32, f32 &rarr; ..., i32<br>..., f64, f64 &rarr; ..., i32</p>
+    <pre><span class="k">clt.un</span></pre>
+    <p>compare less than, unsigned or unordered</p>
+    <p class="transition">..., i32, i32 &rarr; ..., i32<br>..., i64, i64 &rarr; ..., i32<br>..., f32, f32 &rarr; ..., i32<br>..., f64, f64 &rarr; ..., i32</p>
+    <h3 id="branches">Branches</h3>
+    <pre><span class="k">beq</span> <span class="i">label</span>&NewLine;<span class="k">beq.s</span> <span class="i">label</span></pre>
+    <p>branch on equal</p>
+    <p class="transition">..., i32, i32 &rarr; ...<br>..., i64, i64 &rarr; ...<br>..., f32, f32 &rarr; ...<br>..., f64, f64 &rarr; ...<br>..., T&amp;, T&amp; &rarr; ...</p>
+    <pre><span class="k">bge</span> <span class="i">label</span>&NewLine;<span class="k">bge.s</span> <span class="i">label</span></pre>
+    <p>branch on greater than or equal to</p>
+    <p class="transition">..., i32, i32 &rarr; ...<br>..., i64, i64 &rarr; ...<br>..., f32, f32 &rarr; ...<br>..., f64, f64 &rarr; ...</p>
+    <pre><span class="k">bge.un</span> <span class="i">label</span>&NewLine;<span class="k">bge.un.s</span> <span class="i">label</span></pre>
+    <p>branch on greater than or equal to, unsigned or unordered</p>
+    <p class="transition">..., i32, i32 &rarr; ...<br>..., i64, i64 &rarr; ...<br>..., f32, f32 &rarr; ...<br>..., f64, f64 &rarr; ...</p>
+    <pre><span class="k">bgt</span> <span class="i">label</span>&NewLine;<span class="k">bgt.s</span> <span class="i">label</span></pre>
+    <p>branch on greater than</p>
+    <p class="transition">..., i32, i32 &rarr; ...<br>..., i64, i64 &rarr; ...<br>..., f32, f32 &rarr; ...<br>..., f64, f64 &rarr; ...</p>
+    <pre><span class="k">bgt.un</span> <span class="i">label</span>&NewLine;<span class="k">bgt.un.s</span> <span class="i">label</span></pre>
+    <p>branch on greater than, unsigned or unordered</p>
+    <p class="transition">..., i32, i32 &rarr; ...<br>..., i64, i64 &rarr; ...<br>..., f32, f32 &rarr; ...<br>..., f64, f64 &rarr; ...</p>
+    <pre><span class="k">ble</span> <span class="i">label</span>&NewLine;<span class="k">ble.s</span> <span class="i">label</span></pre>
+    <p>branch on less than or equal to</p>
+    <p class="transition">..., i32, i32 &rarr; ...<br>..., i64, i64 &rarr; ...<br>..., f32, f32 &rarr; ...<br>..., f64, f64 &rarr; ...</p>
+    <pre><span class="k">ble.un</span> <span class="i">label</span>&NewLine;<span class="k">ble.un.s</span> <span class="i">label</span></pre>
+    <p>branch on less than or equal to, unsigned or unordered</p>
+    <p class="transition">..., i32, i32 &rarr; ...<br>..., i64, i64 &rarr; ...<br>..., f32, f32 &rarr; ...<br>..., f64, f64 &rarr; ...</p>
+    <pre><span class="k">blt</span> <span class="i">label</span>&NewLine;<span class="k">blt.s</span> <span class="i">label</span></pre>
+    <p>branch on less than</p>
+    <p class="transition">..., i32, i32 &rarr; ...<br>..., i64, i64 &rarr; ...<br>..., f32, f32 &rarr; ...<br>..., f64, f64 &rarr; ...</p>
+    <pre><span class="k">blt.un</span> <span class="i">label</span>&NewLine;<span class="k">blt.un.s</span> <span class="i">label</span></pre>
+    <p>branch on less than, unsigned or unordered</p>
+    <p class="transition">..., i32, i32 &rarr; ...<br>..., i64, i64 &rarr; ...<br>..., f32, f32 &rarr; ...<br>..., f64, f64 &rarr; ...</p>
+    <pre><span class="k">bne.un</span> <span class="i">label</span>&NewLine;<span class="k">bne.un.s</span> <span class="i">label</span></pre>
+    <p>branch on not equal or unordered</p>
+    <p class="transition">..., i32, i32 &rarr; ...<br>..., i64, i64 &rarr; ...<br>..., f32, f32 &rarr; ...<br>..., f64, f64 &rarr; ...<br>..., T&amp;, T&amp; &rarr; ...</p>
+    <pre><span class="k">br</span> <span class="i">label</span>&NewLine;<span class="k">br.s</span> <span class="i">label</span></pre>
+    <p>unconditional branch</p>
+    <p class="transition">... &rarr; ...</p>
+    <pre><span class="k">brfalse</span> <span class="i">label</span>&NewLine;<span class="k">brfalse.s</span> <span class="i">label</span></pre>
+    <p>branch on false, null, or zero</p>
+    <p class="transition">..., i32 &rarr; ...<br>..., T&amp; &rarr; ...</p>
+    <pre><span class="k">brtrue</span> <span class="i">label</span>&NewLine;<span class="k">brtrue.s</span> <span class="i">label</span></pre>
+    <p>branch on true, non-null, or non-zero</p>
+    <p class="transition">..., i32 &rarr; ...<br>..., T&amp; &rarr; ...</p>
+    <h3 id="calls">Calls</h3>
+    <pre><span class="k">call</span> <span class="k">i32</span> <span class="p">&lt;</span><span class="I">Fibonacci</span><span class="p">&gt;</span> <span class="i">@recursive</span><span class="p">(</span><span class="k">i32</span><span class="p">)</span></pre>
+    <p>call a function</p>
+    <p class="transition">..., T0, T1, ... Tn &rarr; ..., T<br>..., T0, T1, ... Tn &rarr; ...</p>
+    <pre><span class="k">syscall</span> <span class="k">void</span> <span class="p">&lt;</span><span class="I">Console</span><span class="p">&gt;</span> <span class="i">@write_line</span><span class="p">(</span><span class="k">i32</span><span class="p">)</span></pre>
+    <p>call an external function</p>
+    <p class="transition">..., T0, T1, ... Tn &rarr; ..., T<br>..., T0, T1, ... Tn &rarr; ...</p>
+    <pre><span class="k">calli</span> <span class="k">i32</span><span class="p">(</span><span class="k">i32</span><span class="p">,</span> <span class="k">i32</span><span class="p">)</span></pre>
+    <p>indirect function call</p>
+    <p class="transition">..., T0, T1, ... Tn, T(T0, T1, ... Tn) &rarr; ..., T<br>..., T0, T1, ... Tn, void(T0, T1, ... Tn) &rarr; ...</p>
+    <pre><span class="k">ret</span></pre>
+    <p>return from function</p>
+    <p class="transition">..., i32 &rarr;<br>..., i64 &rarr;<br>..., f32 &rarr;<br>..., f64 &rarr;<br>..., T&amp; &rarr;<br>... &rarr;</p>
+    <h3 id="references">References</h3>
+    <pre><span class="k">ldind</span> <span class="k">i8</span><br><span class="k">ldind</span> <span class="k">i16</span><br><span class="k">ldind</span> <span class="k">i32</span><br><span class="k">ldind</span> <span class="k">i64</span><br><span class="k">ldind</span> <span class="k">u8</span><br><span class="k">ldind</span> <span class="k">u16</span><br><span class="k">ldind</span> <span class="k">u32</span><br><span class="k">ldind</span> <span class="k">u64</span><br><span class="k">ldind</span> <span class="k">f32</span><br><span class="k">ldind</span> <span class="k">f64</span><br><span class="k">ldind</span> <span class="I">T</span><span class="p">&amp;</span></pre>
+    <p>load value indirect onto the stack</p>
+    <p class="transition">..., i8&amp; &rarr; ..., i32<br>..., i16&amp; &rarr; ..., i32<br>..., i32&amp; &rarr; ..., i32<br>..., i64&amp; &rarr; ..., i64<br>..., u8&amp; &rarr; ..., i32<br>..., u16&amp; &rarr; ..., i32<br>..., u32&amp; &rarr; ..., i32<br>..., u64&amp; &rarr; ..., i64<br>..., f32&amp; &rarr; ..., f32<br>..., f64&amp; &rarr; ..., f64<br>..., T&amp;&amp; &rarr; ..., T&amp;</p>
+    <pre><span class="k">stind</span> <span class="k">i8</span><br><span class="k">stind</span> <span class="k">i16</span><br><span class="k">stind</span> <span class="k">i32</span><br><span class="k">stind</span> <span class="k">i64</span><br><span class="k">stind</span> <span class="k">u8</span><br><span class="k">stind</span> <span class="k">u16</span><br><span class="k">stind</span> <span class="k">u32</span><br><span class="k">stind</span> <span class="k">u64</span><br><span class="k">stind</span> <span class="k">f32</span><br><span class="k">stind</span> <span class="k">f64</span><br><span class="k">stind</span> <span class="I">T</span><span class="p">&amp;</span></pre>
+    <p>store value indirect from stack</p>
+    <p class="transition">..., i8&amp;, i32 &rarr; ...<br>..., i16&amp;, i32 &rarr; ...<br>..., i32&amp;, i32 &rarr; ...<br>..., i64&amp;, i64 &rarr; ...<br>..., u8&amp;, i32 &rarr; ...<br>..., u16&amp;, i32 &rarr; ...<br>..., u32&amp;, i32 &rarr; ...<br>..., u64&amp;, i64 &rarr; ...<br>..., f32&amp;, f32 &rarr; ...<br>..., f64&amp;, f64 &rarr; ...<br>..., T&amp;&amp;, T&amp; &rarr; ...</p>
+    <h3 id="arguments">Arguments</h3>
+    <pre><span class="k">ldarg</span> <span class="i">%param</span></pre>
+    <p>load an argument</p>
+    <p class="transition">... &rarr; ..., i32<br>... &rarr; ..., i64<br>... &rarr; ..., f32<br>... &rarr; ..., f64<br>... &rarr; ..., T&amp;</p>
+    <pre><span class="k">ldarga</span> <span class="i">%param</span></pre>
+    <p>load argument address</p>
+    <p class="transition">... &rarr; ..., i32&amp;<br>... &rarr; ..., i64&amp;<br>... &rarr; ..., f32&amp;<br>... &rarr; ..., f64&amp;<br>... &rarr; ..., T&amp;&amp;</p>
+    <pre><span class="k">starg</span> <span class="i">%param</span></pre>
+    <p>store value in an argument</p>
+    <p class="transition">..., i32 &rarr; ...<br>..., i64 &rarr; ...<br>..., f32 &rarr; ...<br>..., f64 &rarr; ...<br>..., T&amp; &rarr; ...</p>
+    <h3 id="locals">Local Variables</h3>
+    <pre><span class="k">ldloc</span> <span class="i">%local</span></pre>
+    <p>load a local variable</p>
+    <p class="transition">... &rarr; ..., i32<br>... &rarr; ..., i64<br>... &rarr; ..., f32<br>... &rarr; ..., f64<br>... &rarr; ..., T&amp;</p>
+    <pre><span class="k">ldloca</span> <span class="i">%local</span></pre>
+    <p>load local variable address</p>
+    <p class="transition">... &rarr; ..., i32&amp;<br>... &rarr; ..., i64&amp;<br>... &rarr; ..., f32&amp;<br>... &rarr; ..., f64&amp;<br>... &rarr; ..., T&amp;&amp;</p>
+    <pre><span class="k">stloc</span> <span class="i">%local</span></pre>
+    <p>store value in a local variable</p>
+    <p class="transition">..., i32 &rarr; ...<br>..., i64 &rarr; ...<br>..., f32 &rarr; ...<br>..., f64 &rarr; ...<br>..., T&amp; &rarr; ...</p>
+    <h3 id="fields">Fields</h3>
+    <pre><span class="k">ldfld</span> <span class="k">i32</span> <span class="p">&lt;</span><span class="I">Canvas</span><span class="p">&gt;</span> <span class="I">Point2D</span><span class="p">/</span><span class="i">$x</span></pre>
+    <p>load a field of an object</p>
+    <p class="transition">..., T&amp; &rarr; ..., i32<br>..., T&amp; &rarr; ..., i32<br>..., T&amp; &rarr; ..., i32<br>..., T&amp; &rarr; ..., i64<br>..., T&amp; &rarr; ..., i32<br>..., T&amp; &rarr; ..., i32<br>..., T&amp; &rarr; ..., i32<br>..., T&amp; &rarr; ..., i64<br>..., T&amp; &rarr; ..., f32<br>..., T&amp; &rarr; ..., f64<br>..., T&amp; &rarr; ..., S&amp;</p>
+    <pre><span class="k">ldflda</span> <span class="k">i32</span> <span class="p">&lt;</span><span class="I">Canvas</span><span class="p">&gt;</span> <span class="I">Point2D</span><span class="p">/</span><span class="i">$x</span></pre>
+    <p>load field address</p>
+    <p class="transition">..., T&amp; &rarr; ..., i8&amp;<br>..., T&amp; &rarr; ..., i16&amp;<br>..., T&amp; &rarr; ..., i32&amp;<br>..., T&amp; &rarr; ..., i64&amp;<br>..., T&amp; &rarr; ..., i8&amp;<br>..., T&amp; &rarr; ..., i16&amp;<br>..., T&amp; &rarr; ..., i32&amp;<br>..., T&amp; &rarr; ..., i64&amp;<br>..., T&amp; &rarr; ..., f32&amp;<br>..., T&amp; &rarr; ..., f64&amp;<br>..., T&amp; &rarr; ..., S&amp;&amp;</p>
+    <pre><span class="k">stfld</span> <span class="k">i32</span> <span class="p">&lt;</span><span class="I">Canvas</span><span class="p">&gt;</span> <span class="I">Point2D</span><span class="p">/</span><span class="i">$x</span></pre>
+    <p>store value into a field of an object</p>
+    <p class="transition">..., T&amp;, i32 &rarr; ...<br>..., T&amp;, i32 &rarr; ...<br>..., T&amp;, i32 &rarr; ...<br>..., T&amp;, i64 &rarr; ...<br>..., T&amp;, i32 &rarr; ...<br>..., T&amp;, i32 &rarr; ...<br>..., T&amp;, i32 &rarr; ...<br>..., T&amp;, i64 &rarr; ...<br>..., T&amp;, f32 &rarr; ...<br>..., T&amp;, f64 &rarr; ...<br>..., T&amp;, S&amp; &rarr; ...</p>
+    <h3 id="elements">Elements</h3>
+    <pre><span class="k">ldelem</span> <span class="k">i8</span><br><span class="k">ldelem</span> <span class="k">i16</span><br><span class="k">ldelem</span> <span class="k">i32</span><br><span class="k">ldelem</span> <span class="k">i64</span><br><span class="k">ldelem</span> <span class="k">u8</span><br><span class="k">ldelem</span> <span class="k">u16</span><br><span class="k">ldelem</span> <span class="k">u32</span><br><span class="k">ldelem</span> <span class="k">u64</span><br><span class="k">ldelem</span> <span class="k">f32</span><br><span class="k">ldelem</span> <span class="k">f64</span><br><span class="k">ldelem</span> <span class="I">T</span><span class="p">&amp;</span></pre>
+    <p>load an element of an array</p>
+    <p class="transition">..., i8[], i32 &rarr; ..., i32<br>..., i16[], i32 &rarr; ..., i32<br>..., i32[], i32 &rarr; ..., i32<br>..., i64[], i32 &rarr; ..., i64<br>..., u8[], i32 &rarr; ..., i32<br>..., u16[], i32 &rarr; ..., i32<br>..., u32[], i32 &rarr; ..., i32<br>..., u64[], i32 &rarr; ..., i64<br>..., f32[], i32 &rarr; ..., f32<br>..., f64[], i32 &rarr; ..., f64<br>..., T&amp;[], i32 &rarr; ..., T&amp;</p>
+    <pre><span class="k">ldelema</span> <span class="k">i8</span><br><span class="k">ldelema</span> <span class="k">i16</span><br><span class="k">ldelema</span> <span class="k">i32</span><br><span class="k">ldelema</span> <span class="k">i64</span><br><span class="k">ldelema</span> <span class="k">u8</span><br><span class="k">ldelema</span> <span class="k">u16</span><br><span class="k">ldelema</span> <span class="k">u32</span><br><span class="k">ldelema</span> <span class="k">u64</span><br><span class="k">ldelema</span> <span class="k">f32</span><br><span class="k">ldelema</span> <span class="k">f64</span><br><span class="k">ldelema</span> <span class="I">T</span><span class="p">&amp;</span></pre>
+    <p>load address of an element of an array</p>
+    <p class="transition">..., i8[], i32 &rarr; ..., i8&amp;<br>..., i16[], i32 &rarr; ..., i16&amp;<br>..., i32[], i32 &rarr; ..., i32&amp;<br>..., i64[], i32 &rarr; ..., i64&amp;<br>..., u8[], i32 &rarr; ..., i8&amp;<br>..., u16[], i32 &rarr; ..., i16&amp;<br>..., u32[], i32 &rarr; ..., i32&amp;<br>..., u64[], i32 &rarr; ..., i64&amp;<br>..., f32[], i32 &rarr; ..., f32&amp;<br>..., f64[], i32 &rarr; ..., f64&amp;<br>..., T&amp;[], i32 &rarr; ..., T&amp;&amp;</p>
+    <pre><span class="k">stelem</span> <span class="k">i8</span><br><span class="k">stelem</span> <span class="k">i16</span><br><span class="k">stelem</span> <span class="k">i32</span><br><span class="k">stelem</span> <span class="k">i64</span><br><span class="k">stelem</span> <span class="k">u8</span><br><span class="k">stelem</span> <span class="k">u16</span><br><span class="k">stelem</span> <span class="k">u32</span><br><span class="k">stelem</span> <span class="k">u64</span><br><span class="k">stelem</span> <span class="k">f32</span><br><span class="k">stelem</span> <span class="k">f64</span><br><span class="k">stelem</span> <span class="I">T</span><span class="p">&amp;</span></pre>
+    <p>store value into an element of an array</p>
+    <p class="transition">..., i8[], i32, i32 &rarr; ...<br>..., i16[], i32, i32 &rarr; ...<br>..., i32[], i32, i32 &rarr; ...<br>..., i64[], i32, i64 &rarr; ...<br>..., u8[], i32, i32 &rarr; ...<br>..., u16[], i32, i32 &rarr; ...<br>..., u32[], i32, i32 &rarr; ...<br>..., u64[], i32, i64 &rarr; ...<br>..., f32[], i32, f32 &rarr; ...<br>..., f64[], i32, f64 &rarr; ...<br>..., T&amp;[], i32, T&amp; &rarr; ...</p>
+    <h3 id="constants">Constants</h3>
+    <pre><span class="k">ldc</span> <span class="k">i32</span> <span class="n">42</span></pre>
+    <p>load numeric constant</p>
+    <p class="transition">... &rarr; ..., i32</p>
+    <pre><span class="k">ldftn</span> <span class="k">i32</span> <span class="p">&lt;</span><span class="I">Math</span><span class="p">&gt;</span> <span class="i">@max</span><span class="p">(</span><span class="k">i32</span><span class="p">,</span> <span class="k">i32</span><span class="p">)</span></pre>
+    <p>load function pointer</p>
+    <p class="transition">... &rarr; ..., T(T0, T1, ... Tn)</p>
+    <pre><span class="k">ldnull</span></pre>
+    <p>load a null reference</p>
+    <p class="transition">... &rarr; ..., T&amp;</p>
+  </main>
+</body>
+</html>
