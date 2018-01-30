@@ -85,28 +85,50 @@ packageAsDump (CompiledPackage modules) =
 
 moduleAsDump :: CompiledModule -> Builder
 moduleAsDump (CompiledModule symbol _ _ _ _ _ _ imports functions image fingerprint) =
-    headerAsDump 0 (unpack (take 8 image)) symbol fingerprint <>
-    mconcat (L.map (\(i, bytes) -> char7 '\n' <> bytesAsDump (8 + 12 * i) (B.unpack bytes) "-- import #" <> int64Dec i <> char7 '\n') (L.zip [0..] imports)) <>
-    (if L.null functions then char7 '\n' else functionsAsDump image x xs ys) <>
-    bytesAsDump (length image) [] "-- " <> string7 "eof" <> char7 '\n'
+    headerAsDump 0 (unpack (take 8 image)) symbol image fingerprint <>
+    importsAsDump imports <>
+    char7 '\n' <>
+    (if L.null functions then char7 '\n' else functionsAsDump image x xs ys)
     where
         (x:xs) = L.map (\(CompiledFunction _ offset _ _ _ _) -> offset) functions
         ys = L.map (\(CompiledFunction symbol' _ _ _ _ _) -> symbol') functions
 
-headerAsDump :: Int64 -> [Word8] -> ModuleSymbol -> B.ByteString -> Builder
-headerAsDump p bytes symbol fingerprint =
-    char7 '\n' <> bytesAsDump p (L.take 4 bytes) "-- " <> stringUtf8 (symbolPretty symbol) <> char7 '\n' <>
-    mconcat (L.replicate 59 (char7 ' ')) <> string7 "-- fingerprint " <> mconcat (L.map word8HexFixed (B.unpack fingerprint)) <> char7 '\n' <> char7 '\n' <>
-    mconcat (L.intersperse (char7 '\n') (instructionsAsDump (p + 4) (L.drop 4 bytes)))
+headerAsDump :: Int64 -> [Word8] -> ModuleSymbol -> ByteString -> B.ByteString -> Builder
+headerAsDump p bytes symbol image fingerprint =
+    bytesAsDump p (L.take 4 bytes) "-- " <> stringUtf8 (symbolPretty symbol) <> char7 '\n' <>
+    char7 '\n' <>
+    mconcat (L.replicate 59 (char7 ' ')) <> string7 "fingerprint " <> mconcat (L.map word8HexFixed (B.unpack fingerprint)) <> char7 '\n' <>
+    mconcat (L.replicate 59 (char7 ' ')) <> string7 "size " <> int64Dec (length image) <> char7 '\n' <>
+    mconcat (L.replicate 59 (char7 ' ')) <> string7 "version " <> word8Dec (bytes L.!! 0) <> char7 '\n' <>
+    mconcat (L.replicate 59 (char7 ' ')) <> string7 "features 0x" <> word8HexFixed (bytes L.!! 1) <> char7 '\n' <>
+    mconcat (L.replicate 59 (char7 ' ')) <> string7 "modules " <> word8Dec (bytes L.!! 2) <> char7 '\n' <>
+    mconcat (L.replicate 59 (char7 ' ')) <> string7 "imports " <> word8Dec (bytes L.!! 3) <> char7 '\n' <>
+    char7 '\n' <>
+    mconcat (L.intersperse (char7 '\n') (instructionsAsDump (p + 4) (L.drop 4 bytes))) <>
+    char7 '\n'
+
+importsAsDump :: [B.ByteString] -> Builder
+importsAsDump [] =
+    mempty
+importsAsDump imports =
+    mconcat (L.map (\(i, bytes) -> bytesAsDump (8 + 12 * i) (B.unpack bytes) "import #" <> int64Dec i <> char7 '\n') (L.zip [0..] imports)) <> char7 '\n'
 
 functionsAsDump :: ByteString -> Int64 -> [Int64] -> [FunctionSymbol] -> Builder
-functionsAsDump image p []     ys = functionAsDump p (unpack (drop p image)) (L.head ys) <> char7 '\n'
+functionsAsDump image p []     ys = functionAsDump p (unpack (drop p image)) (L.head ys)
 functionsAsDump image p (x:xs) ys = functionAsDump p (unpack (drop p (take x image))) (L.head ys) <> functionsAsDump image x xs (L.tail ys)
 
 functionAsDump :: Int64 -> [Word8] -> FunctionSymbol -> Builder
 functionAsDump p bytes symbol =
-    char7 '\n' <> bytesAsDump p (L.take 3 bytes) "-- " <> stringUtf8 (symbolPretty symbol) <> char7 '\n' <> char7 '\n' <>
-    mconcat (L.intersperse (char7 '\n') (instructionsAsDump (p + 3) (L.drop 3 bytes)))
+    bytesAsDump p (L.take 3 bytes) "-- " <> stringUtf8 (symbolPretty symbol) <> char7 '\n' <>
+    char7 '\n' <>
+    mconcat (L.replicate 59 (char7 ' ')) <> string7 "size " <> intDec (L.length bytes) <> char7 '\n' <>
+    mconcat (L.replicate 59 (char7 ' ')) <> string7 "arguments " <> word8Dec (bytes L.!! 0) <> char7 '\n' <>
+    mconcat (L.replicate 59 (char7 ' ')) <> string7 "locals " <> word8Dec (bytes L.!! 1) <> char7 '\n' <>
+    mconcat (L.replicate 59 (char7 ' ')) <> string7 "max stack " <> word8Dec (bytes L.!! 2) <> char7 '\n' <>
+    char7 '\n' <>
+    mconcat (L.intersperse (char7 '\n') (instructionsAsDump (p + 3) (L.drop 3 bytes))) <>
+    char7 '\n' <>
+    char7 '\n'
 
 instructionsAsDump :: Int64 -> [Word8] -> [Builder]
 instructionsAsDump _ [] = mempty
