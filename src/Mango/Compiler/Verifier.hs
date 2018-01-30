@@ -639,7 +639,7 @@ verifyInstruction context index instruction stack =
         verify_Brfalse_Brtrue = do
             target <- lift . stopOnError . verifyLabelReference $ bindLabel context instruction
             (value, stack') <- pop1 stack
-            expectIntOrRef value stack
+            expectInt32OrRef value stack
             branchTo (labelSymbol_index target) stack'
             branchTo (index + 1) stack'
 
@@ -830,16 +830,15 @@ expectInt32 :: TypeSymbol -> [TypeSymbol] -> Verifier ()
 expectInt32 Int32TypeSymbol _     = return ()
 expectInt32 t               stack = reportAtPosAndStop $ "Instruction needs an i32 value (actual type is '" <> (show t) <> "')\n\nCurrent Stack:\n" <> (prettyStack stack)
 
+expectInt32OrRef :: TypeSymbol -> [TypeSymbol] -> Verifier ()
+expectInt32OrRef Int32TypeSymbol        _     = return ()
+expectInt32OrRef ReferenceTypeSymbol {} _     = return ()
+expectInt32OrRef t                      stack = reportAtPosAndStop $ "Instruction needs an i32 value or reference (actual type is '" <> (show t) <> "')\n\nCurrent Stack:\n" <> (prettyStack stack)
+
 expectInt :: TypeSymbol -> [TypeSymbol] -> Verifier ()
 expectInt Int32TypeSymbol _     = return ()
 expectInt Int64TypeSymbol _     = return ()
 expectInt t               stack = reportAtPosAndStop $ "Instruction needs an integer type (actual type is '" <> (show t) <> "')\n\nCurrent Stack:\n" <> (prettyStack stack)
-
-expectIntOrRef :: TypeSymbol -> [TypeSymbol] -> Verifier ()
-expectIntOrRef Int32TypeSymbol        _     = return ()
-expectIntOrRef Int64TypeSymbol        _     = return ()
-expectIntOrRef ReferenceTypeSymbol {} _     = return ()
-expectIntOrRef t                      stack = reportAtPosAndStop $ "Instruction needs an integer value or reference (actual type is '" <> (show t) <> "')\n\nCurrent Stack:\n" <> (prettyStack stack)
 
 expectNumeric :: TypeSymbol -> [TypeSymbol] -> Verifier ()
 expectNumeric Int32TypeSymbol   _     = return ()
