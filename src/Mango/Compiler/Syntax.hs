@@ -4,7 +4,6 @@
 
 module Mango.Compiler.Syntax (
     -- Syntax Tokens
-    SourcePos (..),
     Location (..),
     SyntaxTrivia (..),
     SyntaxToken (..),
@@ -29,20 +28,17 @@ module Mango.Compiler.Syntax (
     SyntaxTree (..),
     ) where
 
-import Control.Applicative (Applicative (..))
 import Data.Bool
 import Data.ByteString
 import Data.Either (Either)
 import Data.Eq
 import Data.Function
-import Data.List.NonEmpty (NonEmpty (..))
+import Data.Int
 import Data.Maybe (Maybe (..), maybe)
 import Data.Ord
-import Data.Proxy (Proxy (..))
 import Data.String (String)
 import Data.Vector (Vector)
 import System.IO (FilePath)
-import Text.Megaparsec (SourcePos (..), ShowToken (..), Stream (..), sourcePosPretty)
 import Text.Show
 
 import qualified Data.ByteString.Char8 as C
@@ -51,7 +47,7 @@ import qualified Data.List as L
 --------------------------------------------------------------------------------
 
 data Location
-    = Location { location_sourcePos :: {-# UNPACK #-} !SourcePos, location_sourceText :: !ByteString }
+    = Location { location_path :: !FilePath, location_line :: {-# UNPACK #-} !Int, location_column :: {-# UNPACK #-} !Int, location_sourceText :: !ByteString }
 
 data SyntaxTrivia
     = EndOfLineTrivia           { syntaxTrivia_value :: {-# UNPACK #-} !ByteString }
@@ -69,13 +65,13 @@ data SyntaxToken
     | BadToken                  { syntaxToken_leadingTrivia :: [SyntaxTrivia], syntaxToken_value :: {-# UNPACK #-} !ByteString, syntaxToken_trailingTrivia :: [SyntaxTrivia], syntaxToken_location :: !Location }
 
 instance Show Location where
-    show location = sourcePosPretty (location_sourcePos location)
+    show (Location path line column _) = L.concat [path, ":", show line, ":", show column]
 
 instance Eq Location where
-    location == location' = location_sourcePos location == location_sourcePos location'
+    (Location path line column _) == (Location path' line' column' _) = path == path' && line == line' && column == column'
 
 instance Ord Location where
-    compare location location' = compare (location_sourcePos location) (location_sourcePos location')
+    compare (Location path line column _) (Location path' line' column' _) = compare (path, line, column) (path', line', column')
 
 instance Show SyntaxTrivia where
     show trivia = show (C.unpack (syntaxTrivia_value trivia))
@@ -83,30 +79,6 @@ instance Show SyntaxTrivia where
 instance Show SyntaxToken where
     show EndOfFileToken {} = "end of file"
     show token = show (C.unpack (syntaxToken_value token))
-
-instance ShowToken SyntaxToken where
-    showTokens (t:|ts) = L.intercalate " " (L.map show (t:ts))
-
-instance Stream [SyntaxToken] where
-    type Token [SyntaxToken] = SyntaxToken
-    type Tokens [SyntaxToken] = [SyntaxToken]
-    tokenToChunk Proxy = pure
-    tokensToChunk Proxy = id
-    chunkToTokens Proxy = id
-    chunkLength Proxy = L.length
-    chunkEmpty Proxy = L.null
-    positionAt1 Proxy _ token = location_sourcePos (syntaxToken_location token)
-    positionAtN Proxy pos [] = pos
-    positionAtN Proxy _ (token:_) = location_sourcePos (syntaxToken_location token)
-    advance1 Proxy _ _ t = location_sourcePos (syntaxToken_location t)
-    advanceN Proxy _ _ ts = location_sourcePos (syntaxToken_location (L.last ts))
-    take1_ [] = Nothing
-    take1_ (t:ts) = Just (t, ts)
-    takeN_ n s
-        | n <= 0 = Just ([], s)
-        | L.null s = Nothing
-        | otherwise = Just (L.splitAt n s)
-    takeWhile_ = L.span
 
 instance Eq SyntaxToken where
     token == token' = (syntaxToken_location token) == (syntaxToken_location token')

@@ -27,7 +27,7 @@ import Data.List
 import Data.Maybe
 import Data.String (String)
 import Mango.Compiler.Error
-import Mango.Compiler.Syntax (Location (..), SourcePos (..))
+import Mango.Compiler.Syntax (Location (..))
 import Prelude (Num (..), Integer, fromIntegral, undefined)
 import Text.Show
 
@@ -155,7 +155,7 @@ instance Symbol LabelSymbol where
 
 instance Eq ModuleSymbol where
     (ModuleSymbol _ _ _ _ _ _ _ location _)                 == (ModuleSymbol _ _ _ _ _ _ _ location' _)                 = location == location'
-    (ErrorModuleSymbol _ name _ _ _ _ location _)           == (ErrorModuleSymbol _ name' _ _ _ _ location' _)          = sourceName (location_sourcePos location) == sourceName (location_sourcePos location') && name == name'
+    (ErrorModuleSymbol _ name _ _ _ _ location _)           == (ErrorModuleSymbol _ name' _ _ _ _ location' _)          = location_path location == location_path location' && name == name'
     _                                                       == _                                                        = False
 
 instance Eq TypeSymbol where

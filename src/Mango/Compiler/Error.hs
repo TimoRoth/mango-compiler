@@ -34,20 +34,17 @@ import Data.Function
 import Data.Functor.Identity
 import Data.Int (Int)
 import Data.List
-import Data.Maybe (Maybe (..), maybe)
+import Data.Maybe (Maybe (..))
 import Data.Ord
 import Data.Semigroup
 import Data.String (String)
 import Data.Tuple
 import Mango.Compiler.Syntax
 import Prelude (Num (..), mod)
-import Text.Megaparsec.Error (ErrorItem, showErrorComponent)
-import Text.Megaparsec.Pos (unPos)
 import Text.Show
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C
-import qualified Data.Set as E
 
 --------------------------------------------------------------------------------
 
@@ -103,7 +100,7 @@ mapAccumM f a l = fmap swap (runStateT (mapM go l) a)
 
 data Diagnostic
     = GenericError { diagnostic_location :: !Location, genericError_message :: String }
-    | SyntaxError  { diagnostic_location :: !Location, syntaxError_unexpected :: Maybe (ErrorItem SyntaxToken), syntaxError_expecting :: E.Set (ErrorItem SyntaxToken) }
+    | SyntaxError  { diagnostic_location :: !Location, syntaxError_unexpected :: SyntaxToken, syntaxError_expecting :: [String] }
     | BindError    { diagnostic_location :: !Location, bindError_name :: String, bindError_candidates :: [String] }
 
 diagnosticPretty :: Diagnostic -> String
@@ -114,24 +111,19 @@ diagnosticPretty diagnostic =
 diagnosticPretty' :: Int -> Diagnostic -> String
 diagnosticPretty' tabWidth diagnostic =
     show (diagnostic_location diagnostic) <> ":\n" <>
-    linePretty tabWidth (location_sourceText (diagnostic_location diagnostic)) (location_sourcePos (diagnostic_location diagnostic)) <>
+    linePretty tabWidth (diagnostic_location diagnostic) <>
     errorMessage diagnostic
 
 errorMessage :: Diagnostic -> String
 errorMessage GenericError { genericError_message = message } =
     message ++ "\n"
 errorMessage SyntaxError { syntaxError_unexpected = unexpected, syntaxError_expecting = expecting } =
-    errorItemsPretty "unexpected " (maybe E.empty E.singleton unexpected) ++
-    errorItemsPretty "expecting " expecting
+    "unexpected " ++ show unexpected ++ "\n" ++
+    "expecting " ++ orList expecting
 errorMessage BindError { bindError_name = name, bindError_candidates = [] } =
     "\"" ++ name ++ "\" is not declared\n"
 errorMessage BindError { bindError_name = name, bindError_candidates = candidates } = 
     "\"" ++ name ++ "\" is ambiguous between the following declarations:" ++ concatMap ("\n    " ++) candidates ++ "\n"
-
-errorItemsPretty :: String -> E.Set (ErrorItem SyntaxToken) -> String
-errorItemsPretty prefix ts
-    | E.null ts = ""
-    | otherwise = prefix <> orList (E.toAscList (E.map showErrorComponent ts)) <> "\n"
 
 orList :: [String] -> String
 orList []     = ""
@@ -139,17 +131,17 @@ orList [x]    = x
 orList [x, y] = x <> " or " <> y
 orList xs     = intercalate ", " (init xs) <> ", or " <> last xs
 
-linePretty :: Int -> ByteString -> SourcePos -> String
-linePretty w s p =
+linePretty :: Int -> Location -> String
+linePretty w (Location _ line column text) =
     padding    <> " |\n" <>
     lineNumber <> " | " <> rline <> "\n" <>
     padding    <> " | " <> rpadding <> "^\n"
     where
-        line       = C.unpack (selectLine (unPos (sourceLine p) - 1) s)
-        lineNumber = show (unPos (sourceLine p))
+        lineString = C.unpack (selectLine (line - 1) text)
+        lineNumber = show line
         padding    = replicate (length lineNumber) ' '
-        rline      = expandTab w line
-        rpadding   = expandPad w (take (unPos (sourceColumn p) - 1) line)
+        rline      = expandTab w lineString
+        rpadding   = expandPad w (take (column - 1) lineString)
 
 selectLine :: Int -> ByteString -> ByteString
 selectLine l = go 0

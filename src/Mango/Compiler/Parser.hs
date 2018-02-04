@@ -13,66 +13,88 @@ import Control.Applicative
 import Control.Applicative.Combinators
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Trans.State.Strict (StateT (..))
+import Data.Bool
 import Data.ByteString (ByteString, readFile)
 import Data.Char (Char)
 import Data.Either (Either (..))
 import Data.Eq
 import Data.Function
-import Data.Functor.Identity
-import Data.List.NonEmpty (NonEmpty (..))
-import Data.Maybe (Maybe (..))
 import Data.String (String)
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
-import Data.Void (Void)
 import Mango.Compiler.Error
 import Mango.Compiler.Lexer
 import Mango.Compiler.Syntax
+import Prelude (undefined)
 import System.IO (FilePath)
-import Text.Megaparsec (ParsecT, MonadParsec (token), (<?>), runParser)
-import Text.Megaparsec.Error (ErrorItem (..), ErrorFancy (..), ParseError (..))
 import Text.Show
 
 import qualified Data.ByteString.Char8 as C
 import qualified Data.List as L
-import qualified Data.Set as E
 import qualified Data.Vector as V
 
 --------------------------------------------------------------------------------
 
-type Parser = ParsecT Void [SyntaxToken] Identity
+type Parser = StateT [SyntaxToken] Result
+
+data Result a = Result !a | Error !SyntaxToken ![String]
+
+instance Functor Result where
+    fmap _ (Error t e) = Error t e
+    fmap f (Result y)  = Result (f y)
+
+instance Applicative Result where
+    pure   r         = Result r
+    Error  t e <*> _ = Error t e
+    Result f   <*> r = fmap f r
+    
+instance Monad Result where
+    Error  t e >>= _ = Error t e
+    Result r   >>= k = k r
+
+instance Alternative Result where
+    empty                    = undefined
+    Error t e <|> Error _ e' = Error t (e L.++ e')
+    Error _ _ <|> n          = n
+    m         <|> _          = m
+
+instance MonadPlus Result
 
 --------------------------------------------------------------------------------
 
+satisfy :: (SyntaxToken -> Bool) -> String -> Parser SyntaxToken
+satisfy pred hint = StateT $ \(c:cs) -> if pred c then Result (c, cs) else Error c [hint]
+
 identifierToken :: Parser SyntaxToken
-identifierToken = token test Nothing <?> "identifier"
+identifierToken = satisfy test "identifier"
     where
-        test x@IdentifierToken {} = Right x
-        test x = Left (pure (Tokens (x:|[])), E.empty)
+        test IdentifierToken {} = True
+        test _ = False
 
 numericLiteralToken :: Parser SyntaxToken
-numericLiteralToken = token test Nothing <?> "numeric literal"
+numericLiteralToken = satisfy test "numeric literal"
     where
-        test x@NumericLiteralToken {} = Right x
-        test x = Left (pure (Tokens (x:|[])), E.empty)
+        test NumericLiteralToken {} = True
+        test _ = False
 
 keywordToken :: String -> Parser SyntaxToken
-keywordToken k = token test Nothing <?> show k
+keywordToken k = satisfy test (show k)
     where
-        test x@KeywordToken { syntaxToken_value = value } | C.pack k == value = Right x
-        test x = Left (pure (Tokens (x:|[])), E.empty)
+        test KeywordToken { syntaxToken_value = value } = C.pack k == value
+        test _ = False
 
 punctuatorToken :: Char -> Parser SyntaxToken
-punctuatorToken p = token test Nothing <?> show p
+punctuatorToken p = satisfy test (show p)
     where
-        test x@PunctuatorToken { syntaxToken_value = value } | C.singleton p == value = Right x
-        test x = Left (pure (Tokens (x:|[])), E.empty)
+        test PunctuatorToken { syntaxToken_value = value } = C.singleton p == value
+        test _ = False
 
 endOfFileToken :: Parser SyntaxToken
-endOfFileToken = token test Nothing <?> "end of file"
+endOfFileToken = satisfy test "end of file"
     where
-        test x@EndOfFileToken {} = Right x
-        test x = Left (pure (Tokens (x:|[])), E.empty)
+        test EndOfFileToken {} = True
+        test _ = False
 
 --------------------------------------------------------------------------------
 
@@ -90,22 +112,23 @@ literalSyntax = NumericLiteralSyntax <$> optional (punctuatorToken '-') <*> nume
 --------------------------------------------------------------------------------
 
 typeSyntax :: Parser TypeSyntax
-typeSyntax = flip (L.foldl (flip (.)) id) <$> (predefinedTypeSyntax <|> declaredTypeSyntax) <*> many (referenceTypeSyntax <|> arrayOrSpanTypeSyntax <|> functionTypeSyntax)
+typeSyntax =
+    flip (L.foldl (flip (.)) id) <$> (predefinedTypeSyntax <|> declaredTypeSyntax) <*> many (referenceTypeSyntax <|> arrayOrSpanTypeSyntax <|> functionTypeSyntax)
     where
-        predefinedTypeSyntax  = choice [
-            BoolTypeSyntax    <$> keywordToken "bool",
-            Int8TypeSyntax    <$> keywordToken "i8",
-            Int16TypeSyntax   <$> keywordToken "i16",
-            Int32TypeSyntax   <$> keywordToken "i32",
-            Int64TypeSyntax   <$> keywordToken "i64",
-            UInt8TypeSyntax   <$> keywordToken "u8",
-            UInt16TypeSyntax  <$> keywordToken "u16",
-            UInt32TypeSyntax  <$> keywordToken "u32",
-            UInt64TypeSyntax  <$> keywordToken "u64",
-            Float32TypeSyntax <$> keywordToken "f32",
-            Float64TypeSyntax <$> keywordToken "f64",
-            VoidTypeSyntax    <$> keywordToken "void"]
-        declaredTypeSyntax    = DeclaredTypeSyntax <$> option Nothing (Just <$> between (punctuatorToken '<') (punctuatorToken '>') moduleNameSyntax) <*> simpleNameSyntax
+        predefinedTypeSyntax  =
+            BoolTypeSyntax    <$> keywordToken "bool" <|>
+            Int8TypeSyntax    <$> keywordToken "i8"   <|>
+            Int16TypeSyntax   <$> keywordToken "i16"  <|>
+            Int32TypeSyntax   <$> keywordToken "i32"  <|>
+            Int64TypeSyntax   <$> keywordToken "i64"  <|>
+            UInt8TypeSyntax   <$> keywordToken "u8"   <|>
+            UInt16TypeSyntax  <$> keywordToken "u16"  <|>
+            UInt32TypeSyntax  <$> keywordToken "u32"  <|>
+            UInt64TypeSyntax  <$> keywordToken "u64"  <|>
+            Float32TypeSyntax <$> keywordToken "f32"  <|>
+            Float64TypeSyntax <$> keywordToken "f64"  <|>
+            VoidTypeSyntax    <$> keywordToken "void"
+        declaredTypeSyntax    = DeclaredTypeSyntax <$> optional (between (punctuatorToken '<') (punctuatorToken '>') moduleNameSyntax) <*> simpleNameSyntax
         referenceTypeSyntax   = ReferenceTypeSyntax <$ punctuatorToken '&'
         functionTypeSyntax    = flip FunctionTypeSyntax <$> between (punctuatorToken '(') (punctuatorToken ')') (sepBy typeSyntax (punctuatorToken ','))
         arrayOrSpanTypeSyntax = between (punctuatorToken '[') (punctuatorToken ']') (option SpanTypeSyntax (flip ArrayTypeSyntax <$> literalSyntax))
@@ -205,83 +228,82 @@ labeledInstructionSyntax = do
 
 instructionSyntax :: Parser InstructionSyntax
 instructionSyntax =
-    choice [
-        noneInstruction     AddInstructionSyntax        "add",
-        noneInstruction     AndInstructionSyntax        "and",
-        nameInstruction     BeqSInstructionSyntax       "beq.s",
-        nameInstruction     BeqInstructionSyntax        "beq",
-        nameInstruction     BgeUnSInstructionSyntax     "bge.un.s",
-        nameInstruction     BgeUnInstructionSyntax      "bge.un",
-        nameInstruction     BgeSInstructionSyntax       "bge.s",
-        nameInstruction     BgeInstructionSyntax        "bge",
-        nameInstruction     BgtUnSInstructionSyntax     "bgt.un.s",
-        nameInstruction     BgtUnInstructionSyntax      "bgt.un",
-        nameInstruction     BgtSInstructionSyntax       "bgt.s",
-        nameInstruction     BgtInstructionSyntax        "bgt",
-        nameInstruction     BleUnSInstructionSyntax     "ble.un.s",
-        nameInstruction     BleUnInstructionSyntax      "ble.un",
-        nameInstruction     BleSInstructionSyntax       "ble.s",
-        nameInstruction     BleInstructionSyntax        "ble",
-        nameInstruction     BltUnSInstructionSyntax     "blt.un.s",
-        nameInstruction     BltUnInstructionSyntax      "blt.un",
-        nameInstruction     BltSInstructionSyntax       "blt.s",
-        nameInstruction     BltInstructionSyntax        "blt",
-        nameInstruction     BneUnSInstructionSyntax     "bne.un.s",
-        nameInstruction     BneUnInstructionSyntax      "bne.un",
-        noneInstruction     BreakInstructionSyntax      "break",
-        nameInstruction     BrfalseSInstructionSyntax   "brfalse.s",
-        nameInstruction     BrfalseInstructionSyntax    "brfalse",
-        nameInstruction     BrSInstructionSyntax        "br.s",
-        nameInstruction     BrInstructionSyntax         "br",
-        nameInstruction     BrtrueSInstructionSyntax    "brtrue.s",
-        nameInstruction     BrtrueInstructionSyntax     "brtrue",
-        typeInstruction     CalliInstructionSyntax      "calli",
-        functionInstruction CallInstructionSyntax       "call",
-        noneInstruction     CeqInstructionSyntax        "ceq",
-        noneInstruction     CgtUnInstructionSyntax      "cgt.un",
-        noneInstruction     CgtInstructionSyntax        "cgt",
-        noneInstruction     CltUnInstructionSyntax      "clt.un",
-        noneInstruction     CltInstructionSyntax        "clt",
-        typeInstruction     ConvUnInstructionSyntax     "conv.un",
-        typeInstruction     ConvInstructionSyntax       "conv",
-        noneInstruction     DivUnInstructionSyntax      "div.un",
-        noneInstruction     DivInstructionSyntax        "div",
-        noneInstruction     DupInstructionSyntax        "dup",
-        nameInstruction     LdargaInstructionSyntax     "ldarga",
-        nameInstruction     LdargInstructionSyntax      "ldarg",
-        constantInstruction LdcInstructionSyntax        "ldc",
-        typeInstruction     LdelemaInstructionSyntax    "ldelema",
-        typeInstruction     LdelemInstructionSyntax     "ldelem",
-        fieldInstruction    LdfldaInstructionSyntax     "ldflda",
-        fieldInstruction    LdfldInstructionSyntax      "ldfld",
-        functionInstruction LdftnInstructionSyntax      "ldftn",
-        typeInstruction     LdindInstructionSyntax      "ldind",
-        noneInstruction     LdlenInstructionSyntax      "ldlen",
-        nameInstruction     LdlocaInstructionSyntax     "ldloca",
-        nameInstruction     LdlocInstructionSyntax      "ldloc",
-        noneInstruction     LdnullInstructionSyntax     "ldnull",
-        noneInstruction     MulInstructionSyntax        "mul",
-        noneInstruction     NegInstructionSyntax        "neg",
-        typeInstruction     NewarrInstructionSyntax     "newarr",
-        functionInstruction NewobjInstructionSyntax     "newobj",
-        noneInstruction     NopInstructionSyntax        "nop",
-        noneInstruction     NotInstructionSyntax        "not",
-        noneInstruction     OrInstructionSyntax         "or",
-        noneInstruction     PopInstructionSyntax        "pop",
-        noneInstruction     RemUnInstructionSyntax      "rem.un",
-        noneInstruction     RemInstructionSyntax        "rem",
-        noneInstruction     RetInstructionSyntax        "ret",
-        noneInstruction     ShlInstructionSyntax        "shl",
-        noneInstruction     ShrUnInstructionSyntax      "shr.un",
-        noneInstruction     ShrInstructionSyntax        "shr",
-        nameInstruction     StargInstructionSyntax      "starg",
-        typeInstruction     StelemInstructionSyntax     "stelem",
-        fieldInstruction    StfldInstructionSyntax      "stfld",
-        typeInstruction     StindInstructionSyntax      "stind",
-        nameInstruction     StlocInstructionSyntax      "stloc",
-        noneInstruction     SubInstructionSyntax        "sub",
-        functionInstruction SyscallInstructionSyntax    "syscall",
-        noneInstruction     XorInstructionSyntax        "xor"]
+    noneInstruction     AddInstructionSyntax        "add"       <|>
+    noneInstruction     AndInstructionSyntax        "and"       <|>
+    nameInstruction     BeqSInstructionSyntax       "beq.s"     <|>
+    nameInstruction     BeqInstructionSyntax        "beq"       <|>
+    nameInstruction     BgeUnSInstructionSyntax     "bge.un.s"  <|>
+    nameInstruction     BgeUnInstructionSyntax      "bge.un"    <|>
+    nameInstruction     BgeSInstructionSyntax       "bge.s"     <|>
+    nameInstruction     BgeInstructionSyntax        "bge"       <|>
+    nameInstruction     BgtUnSInstructionSyntax     "bgt.un.s"  <|>
+    nameInstruction     BgtUnInstructionSyntax      "bgt.un"    <|>
+    nameInstruction     BgtSInstructionSyntax       "bgt.s"     <|>
+    nameInstruction     BgtInstructionSyntax        "bgt"       <|>
+    nameInstruction     BleUnSInstructionSyntax     "ble.un.s"  <|>
+    nameInstruction     BleUnInstructionSyntax      "ble.un"    <|>
+    nameInstruction     BleSInstructionSyntax       "ble.s"     <|>
+    nameInstruction     BleInstructionSyntax        "ble"       <|>
+    nameInstruction     BltUnSInstructionSyntax     "blt.un.s"  <|>
+    nameInstruction     BltUnInstructionSyntax      "blt.un"    <|>
+    nameInstruction     BltSInstructionSyntax       "blt.s"     <|>
+    nameInstruction     BltInstructionSyntax        "blt"       <|>
+    nameInstruction     BneUnSInstructionSyntax     "bne.un.s"  <|>
+    nameInstruction     BneUnInstructionSyntax      "bne.un"    <|>
+    noneInstruction     BreakInstructionSyntax      "break"     <|>
+    nameInstruction     BrfalseSInstructionSyntax   "brfalse.s" <|>
+    nameInstruction     BrfalseInstructionSyntax    "brfalse"   <|>
+    nameInstruction     BrSInstructionSyntax        "br.s"      <|>
+    nameInstruction     BrInstructionSyntax         "br"        <|>
+    nameInstruction     BrtrueSInstructionSyntax    "brtrue.s"  <|>
+    nameInstruction     BrtrueInstructionSyntax     "brtrue"    <|>
+    typeInstruction     CalliInstructionSyntax      "calli"     <|>
+    functionInstruction CallInstructionSyntax       "call"      <|>
+    noneInstruction     CeqInstructionSyntax        "ceq"       <|>
+    noneInstruction     CgtUnInstructionSyntax      "cgt.un"    <|>
+    noneInstruction     CgtInstructionSyntax        "cgt"       <|>
+    noneInstruction     CltUnInstructionSyntax      "clt.un"    <|>
+    noneInstruction     CltInstructionSyntax        "clt"       <|>
+    typeInstruction     ConvUnInstructionSyntax     "conv.un"   <|>
+    typeInstruction     ConvInstructionSyntax       "conv"      <|>
+    noneInstruction     DivUnInstructionSyntax      "div.un"    <|>
+    noneInstruction     DivInstructionSyntax        "div"       <|>
+    noneInstruction     DupInstructionSyntax        "dup"       <|>
+    nameInstruction     LdargaInstructionSyntax     "ldarga"    <|>
+    nameInstruction     LdargInstructionSyntax      "ldarg"     <|>
+    constantInstruction LdcInstructionSyntax        "ldc"       <|>
+    typeInstruction     LdelemaInstructionSyntax    "ldelema"   <|>
+    typeInstruction     LdelemInstructionSyntax     "ldelem"    <|>
+    fieldInstruction    LdfldaInstructionSyntax     "ldflda"    <|>
+    fieldInstruction    LdfldInstructionSyntax      "ldfld"     <|>
+    functionInstruction LdftnInstructionSyntax      "ldftn"     <|>
+    typeInstruction     LdindInstructionSyntax      "ldind"     <|>
+    noneInstruction     LdlenInstructionSyntax      "ldlen"     <|>
+    nameInstruction     LdlocaInstructionSyntax     "ldloca"    <|>
+    nameInstruction     LdlocInstructionSyntax      "ldloc"     <|>
+    noneInstruction     LdnullInstructionSyntax     "ldnull"    <|>
+    noneInstruction     MulInstructionSyntax        "mul"       <|>
+    noneInstruction     NegInstructionSyntax        "neg"       <|>
+    typeInstruction     NewarrInstructionSyntax     "newarr"    <|>
+    functionInstruction NewobjInstructionSyntax     "newobj"    <|>
+    noneInstruction     NopInstructionSyntax        "nop"       <|>
+    noneInstruction     NotInstructionSyntax        "not"       <|>
+    noneInstruction     OrInstructionSyntax         "or"        <|>
+    noneInstruction     PopInstructionSyntax        "pop"       <|>
+    noneInstruction     RemUnInstructionSyntax      "rem.un"    <|>
+    noneInstruction     RemInstructionSyntax        "rem"       <|>
+    noneInstruction     RetInstructionSyntax        "ret"       <|>
+    noneInstruction     ShlInstructionSyntax        "shl"       <|>
+    noneInstruction     ShrUnInstructionSyntax      "shr.un"    <|>
+    noneInstruction     ShrInstructionSyntax        "shr"       <|>
+    nameInstruction     StargInstructionSyntax      "starg"     <|>
+    typeInstruction     StelemInstructionSyntax     "stelem"    <|>
+    fieldInstruction    StfldInstructionSyntax      "stfld"     <|>
+    typeInstruction     StindInstructionSyntax      "stind"     <|>
+    nameInstruction     StlocInstructionSyntax      "stloc"     <|>
+    noneInstruction     SubInstructionSyntax        "sub"       <|>
+    functionInstruction SyscallInstructionSyntax    "syscall"   <|>
+    noneInstruction     XorInstructionSyntax        "xor"
     where
         constantInstruction constructor keyword = do
             keyword'        <- keywordToken keyword
@@ -292,7 +314,7 @@ instructionSyntax =
         fieldInstruction constructor keyword = do
             keyword'        <- keywordToken keyword
             fieldType       <- typeSyntax
-            moduleName      <- option Nothing (Just <$> between (punctuatorToken '<') (punctuatorToken '>') moduleNameSyntax)
+            moduleName      <- optional (between (punctuatorToken '<') (punctuatorToken '>') moduleNameSyntax)
             typeName        <- simpleNameSyntax
             _               <- punctuatorToken '/'
             fieldName       <- simpleNameSyntax
@@ -301,7 +323,7 @@ instructionSyntax =
         functionInstruction constructor keyword = do
             keyword'        <- keywordToken keyword
             returnType      <- typeSyntax
-            moduleName      <- option Nothing (Just <$> between (punctuatorToken '<') (punctuatorToken '>') moduleNameSyntax)
+            moduleName      <- optional (between (punctuatorToken '<') (punctuatorToken '>') moduleNameSyntax)
             functionName    <- simpleNameSyntax
             parameterTypes  <- between (punctuatorToken '(') (punctuatorToken ')') (sepBy typeSyntax (punctuatorToken ','))
             return (constructor keyword' returnType moduleName functionName parameterTypes)
@@ -328,10 +350,9 @@ parseText path text =
 
 parseBytes :: (Monad m) => FilePath -> ByteString -> CompilerT Diagnostic m SyntaxTree
 parseBytes path text =
-    case runParser compilationUnitSyntax path (tokenizeBytes path text) of
-        Right root                         -> return (SyntaxTree root path text)
-        Left (TrivialError (pos:|_) us ps) -> report (SyntaxError (Location pos text) us ps) >> stop
-        Left (FancyError   (pos:|_) es)    -> reportMany [GenericError (Location pos text) e | ErrorFail e <- E.toAscList es] >> stop
+    case runStateT compilationUnitSyntax (tokenizeBytes path text) of
+        Result (root, _) -> return (SyntaxTree root path text)
+        Error t e        -> report (SyntaxError (syntaxToken_location t) t e) >> stop
 
 parseFile :: (MonadIO m) => FilePath -> CompilerT Diagnostic m SyntaxTree
 parseFile path =
@@ -339,6 +360,6 @@ parseFile path =
 
 parseFiles :: (MonadIO m) => [FilePath] -> CompilerT Diagnostic m [SyntaxTree]
 parseFiles paths =
-    sequentialC (fmap parseFile paths)
+    sequentialC (L.map parseFile paths)
 
 --------------------------------------------------------------------------------

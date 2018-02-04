@@ -18,21 +18,19 @@ import Data.Functor
 import Data.Int (Int)
 import Data.Maybe (Maybe (..))
 import Data.Ord
-import Data.Semigroup
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Word (Word8)
 import Mango.Compiler.Syntax
 import Prelude (Num (..))
 import System.IO (IO, FilePath)
-import Text.Megaparsec.Pos
 
 import qualified Data.Set as E
 
 --------------------------------------------------------------------------------
 
 newtype Lexer a
-    = Lexer { runLexer :: (ByteString, SourcePos, ByteString) -> (a, ByteString, SourcePos, ByteString) }
+    = Lexer { runLexer :: (ByteString, Location) -> (a, ByteString, Location) }
 
 instance Functor Lexer where
     fmap f x = x >>= (pure . f)
@@ -42,29 +40,29 @@ instance Applicative Lexer where
     (<*>) = ap
 
 instance Monad Lexer where
-    return a = Lexer (\(b, p, t) -> (a, b, p, t))
-    m >>= k  = Lexer (\s -> let (a, b', p', t') = runLexer m s in runLexer (k a) (b', p', t'))
+    return a = Lexer (\(b, l) -> (a, b, l))
+    m >>= k  = Lexer (\s -> let (a, b', l') = runLexer m s in runLexer (k a) (b', l'))
 
 at :: Lexer Location
-at = Lexer (\(b, p, t) -> (Location p t, b, p, t))
+at = Lexer (\(b, l) -> (l, b, l))
 
 eol :: Lexer ()
-eol = Lexer (\(b, p, t) -> ((), b, p { sourceLine = sourceLine p <> pos1, sourceColumn = pos1 }, t))
+eol = Lexer (\(b, Location path line _ text) -> ((), b, Location path (line + 1) 1 text))
 
 eat :: (ByteString -> (a, ByteString)) -> Lexer a
-eat f = Lexer (\(b, p, t) -> let (x, b') = f b in (x, b', p { sourceColumn = mkPos (unPos (sourceColumn p) + (length b - length b')) }, t))
+eat f = Lexer (\(b, Location path line column text) -> let (x, b') = f b in (x, b', Location path line (column + (length b - length b')) text))
 
 set :: (ByteString -> ByteString) -> Lexer ()
 set f = eat (\b -> ((), f b))
 
 get :: (ByteString -> a) -> Lexer a
-get f = Lexer (\(b, p, t) -> (f b, b, p, t))
+get f = Lexer (\(b, l) -> (f b, b, l))
 
 peek :: Int -> Lexer (Maybe Word8)
 peek i = get (\b -> if i < length b then Just (index b i) else Nothing)
 
 run :: Lexer a -> Lexer (a, ByteString)
-run m = Lexer (\(b, p, t) -> let (x, b', p', t') = runLexer m (b, p, t) in ((x, take (length b - length b') b), b', p', t'))
+run m = Lexer (\(b, l) -> let (x, b', l') = runLexer m (b, l) in ((x, take (length b - length b') b), b', l'))
 
 --------------------------------------------------------------------------------
 
@@ -278,7 +276,7 @@ tokenizeBytes :: FilePath -> ByteString -> [SyntaxToken]
 tokenizeBytes path text =
     tokens
     where
-        (tokens, _, _, _) = runLexer scanTokens (text, initialPos path, text)
+        (tokens, _, _) = runLexer scanTokens (text, Location path 1 1 text)
 
 tokenizeFile :: FilePath -> IO [SyntaxToken]
 tokenizeFile path =
