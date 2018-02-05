@@ -8,10 +8,10 @@ module Mango.Compiler.Lexer (
     tokenizeFiles,
     ) where
 
-import Control.Applicative (Applicative (..))
-import Control.Monad (Monad (..), ap, mapM)
+import Control.Monad
+import Control.Monad.Trans.State.Strict
 import Data.Bool
-import Data.ByteString
+import Data.ByteString (ByteString, readFile)
 import Data.Eq
 import Data.Function
 import Data.Functor
@@ -25,44 +25,49 @@ import Mango.Compiler.Syntax
 import Prelude (Num (..))
 import System.IO (IO, FilePath)
 
+import qualified Data.ByteString as B
 import qualified Data.Set as E
 
 --------------------------------------------------------------------------------
 
-newtype Lexer a
-    = Lexer { runLexer :: (ByteString, Location) -> (a, ByteString, Location) }
+type Lexer = State (ByteString, Location)
 
-instance Functor Lexer where
-    fmap f x = x >>= (pure . f)
+span :: Lexer a -> Lexer (a, ByteString)
+span m = state $ \(b, l) -> let (x, (b', l')) = runState m (b, l) in ((x, B.take (B.length b - B.length b') b), (b', l'))
 
-instance Applicative Lexer where
-    pure = return
-    (<*>) = ap
-
-instance Monad Lexer where
-    return a = Lexer (\(b, l) -> (a, b, l))
-    m >>= k  = Lexer (\s -> let (a, b', l') = runLexer m s in runLexer (k a) (b', l'))
+--------------------------------------------------------------------------------
 
 at :: Lexer Location
-at = Lexer (\(b, l) -> (l, b, l))
+at = gets $ \(_, l) -> l
 
 eol :: Lexer ()
-eol = Lexer (\(b, Location path line _ text) -> ((), b, Location path (line + 1) 1 text))
+eol = state $ \(b, Location path line _ text) -> ((), (b, Location path (line + 1) 1 text))
 
-eat :: (ByteString -> (a, ByteString)) -> Lexer a
-eat f = Lexer (\(b, Location path line column text) -> let (x, b') = f b in (x, b', Location path line (column + (length b - length b')) text))
+set :: ByteString -> (ByteString, Location) -> (ByteString, Location)
+set b' (b, Location path line column text) = (b', Location path line (column + (B.length b - B.length b')) text)
 
-set :: (ByteString -> ByteString) -> Lexer ()
-set f = eat (\b -> ((), f b))
+--------------------------------------------------------------------------------
 
-get :: (ByteString -> a) -> Lexer a
-get f = Lexer (\(b, l) -> (f b, b, l))
+null :: Lexer Bool
+null = gets $ \(b, _) -> B.null b
+
+head :: Lexer Word8
+head = gets $ \(b, _) -> B.head b
 
 peek :: Int -> Lexer (Maybe Word8)
-peek i = get (\b -> if i < length b then Just (index b i) else Nothing)
+peek i = gets $ \(b, _) -> if i < B.length b then Just (B.index b i) else Nothing
 
-run :: Lexer a -> Lexer (a, ByteString)
-run m = Lexer (\(b, l) -> let (x, b', l') = runLexer m (b, l) in ((x, take (length b - length b') b), b', l'))
+take :: Int -> Lexer ByteString
+take n = state $ \(b, l) -> let (x, b') = B.splitAt n b in (x, set b' (b, l))
+
+takeWhile :: (Word8 -> Bool) -> Lexer ByteString
+takeWhile p = state $ \(b, l) -> let (x, b') = B.span p b in (x, set b' (b, l))
+
+drop :: Int -> Lexer ()
+drop n = state $ \(b, l) -> let b' = B.drop n b in ((), set b' (b, l))
+
+dropWhile :: (Word8 -> Bool) -> Lexer ()
+dropWhile p = state $ \(b, l) -> let b' = B.dropWhile p b in ((), set b' (b, l))
 
 --------------------------------------------------------------------------------
 
@@ -90,70 +95,70 @@ keywords = E.fromList [
 
 scanMultiLineComment :: Lexer Bool
 scanMultiLineComment =
-    set (drop 2) >> go
+    drop 2 >> go
     where
         go = do
-            set (dropWhile (\x -> not (x == 42 || x == 13 || x == 10)))
-            eof <- get null
+            dropWhile (\x -> not (x == 42 || x == 13 || x == 10))
+            eof <- null
             if eof then
                 return False
             else do
-                next <- get head
+                next <- head
                 case next of
                     42 -> do
                         next' <- peek 1
                         case next' of
-                            Just 47 -> set (drop 2) >> return True
-                            _       -> set (drop 1) >> go
+                            Just 47 -> drop 2 >> return True
+                            _       -> drop 1 >> go
                     13 -> do
                         next' <- peek 1
                         case next' of
-                            Just 10 -> set (drop 2)
-                            _       -> set (drop 1)
+                            Just 10 -> drop 2
+                            _       -> drop 1
                         eol
                         go
                     10 -> do
-                        set (drop 1)
+                        drop 1
                         eol
                         go
                     _ -> do
-                        set (drop 1)
+                        drop 1
                         go
 
 scanTrivia :: Bool -> Lexer [SyntaxTrivia]
 scanTrivia isTrailing = do
-    eof <- get null
+    eof <- null
     if eof then
         return []
     else do
-        next <- get head
+        next <- head
         case next of
             32 -> do
-                value <- eat (span isWhiteSpace)
+                value <- takeWhile isWhiteSpace
                 rest <- scanTrivia isTrailing
                 return (WhitespaceTrivia value:rest)
             13 -> do
                 next' <- peek 1
                 value <- case next' of
-                    Just 10 -> eat (splitAt 2)
-                    _       -> eat (splitAt 1)
+                    Just 10 -> take 2
+                    _       -> take 1
                 eol
-                rest <- if isTrailing then pure [] else scanTrivia isTrailing
+                rest <- if isTrailing then return [] else scanTrivia isTrailing
                 return (EndOfLineTrivia value:rest)
             10 -> do
-                value <- eat (splitAt 1)
+                value <- take 1
                 eol
-                rest <- if isTrailing then pure [] else scanTrivia isTrailing
+                rest <- if isTrailing then return [] else scanTrivia isTrailing
                 return (EndOfLineTrivia value:rest)
             47 -> do
                 next' <- peek 1
                 case next' of
                     Just 47 -> do
-                        value <- eat (break (\x -> x == 13 || x == 10))
+                        value <- takeWhile (\x -> not (x == 13 || x == 10))
                         rest <- scanTrivia isTrailing
                         return (SingleLineCommentTrivia value:rest)
                     Just 42 -> do
-                        (success, value) <- run scanMultiLineComment
+                        (success, value) <- span scanMultiLineComment
                         rest <- scanTrivia isTrailing
                         if success then
                             return (MultiLineCommentTrivia value:rest)
@@ -161,7 +166,7 @@ scanTrivia isTrailing = do
                             return (ErrorTrivia value:rest)
                     _ -> return []
             x | isWhiteSpace x -> do
-                value <- eat (span isWhiteSpace)
+                value <- takeWhile isWhiteSpace
                 rest <- scanTrivia isTrailing
                 return (WhitespaceTrivia value:rest)
               | otherwise -> do
@@ -172,18 +177,18 @@ scanTrivia isTrailing = do
 scanIdentifierOrKeyword :: [SyntaxTrivia] -> Lexer SyntaxToken
 scanIdentifierOrKeyword leadingTrivia = do
     pos <- at
-    end <- get (\s -> 1 + length (takeWhile isIdContinue (tail s)))
-    identifier <- get (take end)
+    end <- gets $ \(b, _) -> 1 + B.length (B.takeWhile isIdContinue (B.tail b))
+    identifier <- gets $ \(b, _) -> (B.take end b)
     if E.member identifier keywords then do
         next <- peek end
         end' <- case next of
-            Just 46 -> get (\s -> end + length (takeWhile isIdContinue' (drop end s)))
+            Just 46 -> gets $ \(b, _) -> end + B.length (B.takeWhile isIdContinue' (B.drop end b))
             _       -> return end
-        keyword <- eat (splitAt end')
+        keyword <- take end'
         trailingTrivia <- scanTrivia True
         return (KeywordToken leadingTrivia keyword trailingTrivia pos)
     else do
-        set (drop end)
+        drop end
         trailingTrivia <- scanTrivia True
         return (IdentifierToken leadingTrivia identifier trailingTrivia pos)
     where
@@ -193,7 +198,7 @@ scanIdentifierOrKeyword leadingTrivia = do
 scanNumericLiteral :: [SyntaxTrivia] -> Lexer SyntaxToken
 scanNumericLiteral leadingTrivia = do
     pos <- at
-    literal <- eat (span isDigit)
+    literal <- takeWhile isDigit
     trailingTrivia <- scanTrivia True
     return (NumericLiteralToken leadingTrivia literal trailingTrivia pos)
     where
@@ -202,26 +207,26 @@ scanNumericLiteral leadingTrivia = do
 scanPunctuator :: [SyntaxTrivia] -> Lexer SyntaxToken
 scanPunctuator leadingTrivia = do
     pos <- at
-    punctuator <- eat (splitAt 1)
+    punctuator <- take 1
     trailingTrivia <- scanTrivia True
     return (PunctuatorToken leadingTrivia punctuator trailingTrivia pos)
 
 scanBad :: [SyntaxTrivia] -> Lexer SyntaxToken
 scanBad leadingTrivia = do
     pos <- at
-    character <- eat (splitAt 1)
+    character <- take 1
     trailingTrivia <- scanTrivia True
     return (BadToken leadingTrivia character trailingTrivia pos)
 
 scanToken :: Lexer SyntaxToken
 scanToken = do
     leadingTrivia <- scanTrivia False
-    eof <- get null
+    eof <- null
     if eof then do
         pos <- at
-        return (EndOfFileToken leadingTrivia empty [] pos)
+        return (EndOfFileToken leadingTrivia B.empty [] pos)
     else do
-        next <- get head
+        next <- head
         case next of
             33              -> scanPunctuator          leadingTrivia
             35              -> scanPunctuator          leadingTrivia
@@ -274,9 +279,7 @@ tokenizeText path text =
 
 tokenizeBytes :: FilePath -> ByteString -> [SyntaxToken]
 tokenizeBytes path text =
-    tokens
-    where
-        (tokens, _, _) = runLexer scanTokens (text, Location path 1 1 text)
+    evalState scanTokens (text, Location path 1 1 text)
 
 tokenizeFile :: FilePath -> IO [SyntaxToken]
 tokenizeFile path =
