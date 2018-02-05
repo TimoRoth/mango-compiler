@@ -177,20 +177,19 @@ scanTrivia isTrailing = do
 scanIdentifierOrKeyword :: [SyntaxTrivia] -> Lexer SyntaxToken
 scanIdentifierOrKeyword leadingTrivia = do
     pos <- at
-    end <- gets $ \(b, _) -> 1 + B.length (B.takeWhile isIdContinue (B.tail b))
-    identifier <- gets $ \(b, _) -> (B.take end b)
-    if E.member identifier keywords then do
-        next <- peek end
-        end' <- case next of
-            Just 46 -> gets $ \(b, _) -> end + B.length (B.takeWhile isIdContinue' (B.drop end b))
-            _       -> return end
-        keyword <- take end'
-        trailingTrivia <- scanTrivia True
-        return (KeywordToken leadingTrivia keyword trailingTrivia pos)
-    else do
-        drop end
-        trailingTrivia <- scanTrivia True
-        return (IdentifierToken leadingTrivia identifier trailingTrivia pos)
+    (make, identifier) <- span $ do
+        ((), identifier) <- span $ do
+            drop 1
+            dropWhile isIdContinue
+        if E.member identifier keywords then do
+            next <- peek 0
+            case next of
+                Just 46 -> dropWhile isIdContinue' >> return KeywordToken
+                _       ->                            return KeywordToken
+        else
+            return IdentifierToken
+    trailingTrivia <- scanTrivia True
+    return (make leadingTrivia identifier trailingTrivia pos)
     where
         isIdContinue  x = (x >= 65) && (x <= 90) || (x >= 97) && (x <= 122) || (x >= 48) && (x <= 57) || (x == 95)
         isIdContinue' x = (isIdContinue x) || (x == 46)
