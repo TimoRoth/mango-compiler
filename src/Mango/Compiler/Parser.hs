@@ -20,9 +20,11 @@ import Data.Char (Char)
 import Data.Either (Either (..))
 import Data.Eq
 import Data.Function
+import Data.Ord
 import Data.String (String)
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
+import Data.Tuple (fst, snd)
 import Mango.Compiler.Error
 import Mango.Compiler.Lexer
 import Mango.Compiler.Syntax
@@ -38,33 +40,33 @@ import qualified Data.Vector as V
 
 type Parser = StateT [SyntaxToken] Result
 
-data Result a = Result !a | Error !SyntaxToken ![String]
+data Result a = Result !a | Error ![(SyntaxToken, String)]
 
 instance Functor Result where
-    fmap _ (Error t e) = Error t e
-    fmap f (Result y)  = Result (f y)
+    fmap _ (Error e)  = Error e
+    fmap f (Result y) = Result (f y)
 
 instance Applicative Result where
-    pure   r         = Result r
-    Error  t e <*> _ = Error t e
-    Result f   <*> r = fmap f r
+    pure   r       = Result r
+    Error  e <*> _ = Error e
+    Result f <*> r = fmap f r
     
 instance Monad Result where
-    Error  t e >>= _ = Error t e
-    Result r   >>= k = k r
+    Error  e >>= _ = Error e
+    Result r >>= k = k r
 
 instance Alternative Result where
-    empty                    = undefined
-    Error t e <|> Error _ e' = Error t (e L.++ e')
-    Error _ _ <|> n          = n
-    m         <|> _          = m
+    empty                = undefined
+    Error e <|> Error e' = Error (e L.++ e')
+    Error _ <|> n        = n
+    m       <|> _        = m
 
 instance MonadPlus Result
 
 --------------------------------------------------------------------------------
 
 satisfy :: (SyntaxToken -> Bool) -> String -> Parser SyntaxToken
-satisfy pred hint = StateT $ \(c:cs) -> if pred c then Result (c, cs) else Error c [hint]
+satisfy test hint = StateT $ \(t:ts) -> if test t then Result (t, ts) else Error [(t, hint)]
 
 identifierToken :: Parser SyntaxToken
 identifierToken = satisfy test "identifier"
@@ -137,8 +139,7 @@ typeSyntax =
 
 compilationUnitSyntax :: Parser CompilationUnitSyntax
 compilationUnitSyntax = do
-    modules                 <- many moduleDeclarationSyntax
-    _                       <- endOfFileToken
+    modules                 <- manyTill moduleDeclarationSyntax endOfFileToken
     return (CompilationUnitSyntax modules)
 
 moduleDeclarationSyntax :: Parser ModuleDeclarationSyntax
@@ -147,8 +148,7 @@ moduleDeclarationSyntax = do
     moduleName              <- moduleNameSyntax
     _                       <- punctuatorToken '{'
     importDirectives        <- many importDirectiveSyntax
-    moduleMembers           <- many moduleMemberSyntax
-    _                       <- punctuatorToken '}'
+    moduleMembers           <- manyTill  moduleMemberSyntax (punctuatorToken '}')
     return (ModuleDeclarationSyntax moduleKeyword moduleName importDirectives moduleMembers)
 
 importDirectiveSyntax :: Parser ImportDirectiveSyntax
@@ -165,8 +165,7 @@ typeDeclarationSyntax = do
     typeKeyword             <- keywordToken "type"
     typeName                <- simpleNameSyntax
     _                       <- punctuatorToken '{'
-    fieldDeclarations       <- many fieldDeclarationSyntax
-    _                       <- punctuatorToken '}'
+    fieldDeclarations       <- manyTill fieldDeclarationSyntax (punctuatorToken '}')
     return (TypeDeclarationSyntax typeKeyword typeName fieldDeclarations)
 
 fieldDeclarationSyntax :: Parser FieldDeclarationSyntax
@@ -208,8 +207,7 @@ functionBodySyntax :: Parser FunctionBodySyntax
 functionBodySyntax = do
     _                       <- punctuatorToken '{'
     localDeclarations       <- many localDeclarationSyntax
-    instructions            <- many (instructionSyntax <|> labeledInstructionSyntax)
-    _                       <- punctuatorToken '}'
+    instructions            <- manyTill (instructionSyntax <|> labeledInstructionSyntax) (punctuatorToken '}')
     return (FunctionBodySyntax localDeclarations (V.fromList instructions))
 
 localDeclarationSyntax :: Parser LocalDeclarationSyntax
@@ -351,8 +349,13 @@ parseText path text =
 parseBytes :: (Monad m) => FilePath -> ByteString -> CompilerT Diagnostic m SyntaxTree
 parseBytes path text =
     case runStateT compilationUnitSyntax (tokenizeBytes path text) of
-        Result (root, _) -> return (SyntaxTree root path text)
-        Error t e        -> report (SyntaxError (syntaxToken_location t) t e) >> stop
+        Error errors -> do
+            let unexpected = L.maximumBy (comparing syntaxToken_location) (L.map fst errors)
+            let expecting = L.map snd (L.filter ((==) unexpected . fst) errors)
+            report (SyntaxError (syntaxToken_location unexpected) unexpected expecting)
+            stop
+        Result (root, _) -> do
+            return (SyntaxTree root path text)
 
 parseFile :: (MonadIO m) => FilePath -> CompilerT Diagnostic m SyntaxTree
 parseFile path =
