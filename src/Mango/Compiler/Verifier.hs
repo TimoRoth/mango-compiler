@@ -509,21 +509,24 @@ verifyInstruction context index instruction stack =
             field <- lift . verifyFieldReference $ bindField context instruction
             let fieldType = fieldSymbol_fieldType field
             (object, stack') <- pop1 stack
-            requireAssignableTo object (containingType field)
+            sourceType <- expectReference object stack
+            requireAssignableTo sourceType (containingType field)
             branchTo (index + 1) (intermediateType fieldType:stack')
 
         v LdfldaInstructionSyntax {} = do
             field <- lift . verifyFieldReference $ bindField context instruction
             let fieldType = fieldSymbol_fieldType field
             (object, stack') <- pop1 stack
-            requireAssignableTo object (containingType field)
+            sourceType <- expectReference object stack
+            requireAssignableTo sourceType (containingType field)
             branchTo (index + 1) (intermediateType (ReferenceTypeSymbol fieldType):stack')
 
         v StfldInstructionSyntax {} = do
             field <- lift . verifyFieldReference $ bindField context instruction
             let fieldType = fieldSymbol_fieldType field
             (value, object, stack') <- pop2 stack
-            requireAssignableTo object (containingType field)
+            destinationType <- expectReference object stack
+            requireAssignableTo (containingType field) destinationType
             requireAssignableTo value fieldType
             checkLifetime fieldType
             branchTo (index + 1) stack'
