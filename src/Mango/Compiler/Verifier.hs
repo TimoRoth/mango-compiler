@@ -800,7 +800,7 @@ mergeStackStates existing stack = go existing stack
 
 requireAssignableTo :: TypeSymbol -> TypeSymbol -> Verifier ()
 requireAssignableTo s t | verifierAssignableTo s t = return ()
-                        | otherwise                = reportAtPosAndStop $ "'" <> (show t) <> "' is not assignable to '" <> (show s) <> "'"
+                        | otherwise                = reportAtPosAndStop $ "'" <> (show s) <> "' is not assignable to '" <> (show t) <> "'"
 
 requireStackEmpty :: [TypeSymbol] -> String -> Verifier ()
 requireStackEmpty [] _       = return ()
