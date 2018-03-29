@@ -219,8 +219,8 @@ instance Show TypeSymbol where
     show Float64TypeSymbol                              = "f64"
     show VoidTypeSymbol                                 = "void"
     show (ArrayTypeSymbol elementType length_)          = concat [show elementType, "[", show length_, "]"]
-    show (StructuredTypeSymbol container name _ _ _ _)  = concat ["<", symbolName container, "> ", name]
-    show (ErrorTypeSymbol container name _ _ _ _)       = concat ["<", symbolName container, "> ", name]
+    show (StructuredTypeSymbol container name _ _ _ _)  = concat ["<", symbolName container, ">", name]
+    show (ErrorTypeSymbol container name _ _ _ _)       = concat ["<", symbolName container, ">", name]
     show (FunctionTypeSymbol returnType parameterTypes) = concat [show returnType, "(", intercalate ", " (map show parameterTypes), ")"]
     show (ReferenceTypeSymbol referencedType)           = concat [show referencedType, "&"]
     show (SpanTypeSymbol elementType)                   = concat [show elementType, "[]"]
