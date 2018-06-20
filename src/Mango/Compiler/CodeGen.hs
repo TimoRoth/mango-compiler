@@ -207,11 +207,11 @@ compileInstruction context symbol (offset, features, seenDeadCode) instruction =
 
         go (LdargInstruction          j s p                    ) = select11  j t   ldarg_i8 ldarg_i16 ldarg_i32 ldarg_i64 ldarg_u8 ldarg_u16 ldarg_u32 ldarg_u64 ldarg_f32 ldarg_f64 ldarg_ref <*> stackSlot j (parameterStackSlot s p) where t = parameterSymbol_parameterType p
         go (LdargaInstruction         j s p                    ) = ldarga                                                                                                                      <$> stackSlot j (parameterStackSlot s p)
-        go (StargInstruction          j s p                    ) = select5   j t   starg_i32 starg_i64 starg_f32 starg_f64 starg_ref                                                           <*> stackSlot j (parameterStackSlot s p) where t = parameterSymbol_parameterType p
+        go (StargInstruction          j s p                    ) = select11  j t   starg_i8 starg_i16 starg_i32 starg_i64 starg_u8 starg_u16 starg_u32 starg_u64 starg_f32 starg_f64 starg_ref <*> stackSlot j (parameterStackSlot s p) where t = parameterSymbol_parameterType p
 
         go (LdlocInstruction          j s l                    ) = select11  j t   ldloc_i8 ldloc_i16 ldloc_i32 ldloc_i64 ldloc_u8 ldloc_u16 ldloc_u32 ldloc_u64 ldloc_f32 ldloc_f64 ldloc_ref <*> stackSlot j (localStackSlot s l) where t = localSymbol_localType l
         go (LdlocaInstruction         j s l                    ) = ldloca                                                                                                                      <$> stackSlot j (localStackSlot s l)
-        go (StlocInstruction          j s l                    ) = select5   j t   stloc_i32 stloc_i64 stloc_f32 stloc_f64 stloc_ref                                                           <*> stackSlot j (localStackSlot s l) where t = localSymbol_localType l
+        go (StlocInstruction          j s l                    ) = select11  j t   stloc_i8 stloc_i16 stloc_i32 stloc_i64 stloc_u8 stloc_u16 stloc_u32 stloc_u64 stloc_f32 stloc_f64 stloc_ref <*> stackSlot j (localStackSlot s l) where t = localSymbol_localType l
 
         go (LdindInstruction          j _ t                    ) = select11  j t   ldind_i8 ldind_i16 ldind_i32 ldind_i64 ldind_u8 ldind_u16 ldind_u32 ldind_u64 ldind_f32 ldind_f64 ldind_ref
         go (StindInstruction          j _ t                    ) = select11  j t   stind_i8 stind_i16 stind_i32 stind_i64 stind_u8 stind_u16 stind_u32 stind_u64 stind_f32 stind_f64 stind_ref
@@ -359,6 +359,7 @@ select5 _ ReferenceTypeSymbol {} _ _ _ _ ref = return ref
 select5 l t                      _ _ _ _ _   = reportIf True ("Instruction supports i32, i64, f32, f64, and references, but not '" <> show t <> "'") l >> stop
 
 select11 :: Location -> TypeSymbol -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> Compiler a
+select11 _ BoolTypeSymbol         i8  _ _ _ _ _ _ _ _ _ _ = return i8
 select11 _ Int8TypeSymbol         i8  _ _ _ _ _ _ _ _ _ _ = return i8
 select11 _ Int16TypeSymbol        _ i16 _ _ _ _ _ _ _ _ _ = return i16
 select11 _ Int32TypeSymbol        _ _ i32 _ _ _ _ _ _ _ _ = return i32
@@ -370,7 +371,7 @@ select11 _ UInt64TypeSymbol       _ _ _ _ _ _ _ u64 _ _ _ = return u64
 select11 _ Float32TypeSymbol      _ _ _ _ _ _ _ _ f32 _ _ = return f32
 select11 _ Float64TypeSymbol      _ _ _ _ _ _ _ _ _ f64 _ = return f64
 select11 _ ReferenceTypeSymbol {} _ _ _ _ _ _ _ _ _ _ ref = return ref
-select11 l t                      _ _ _ _ _ _ _ _ _ _ _   = reportIf True ("Instruction supports i8, i16, i32, i64, u8, u16, u32, u64, f32, f64, and references, but not '" <> show t <> "'") l >> stop
+select11 l t                      _ _ _ _ _ _ _ _ _ _ _   = reportIf True ("Instruction supports bool, i8, i16, i32, i64, u8, u16, u32, u64, f32, f64, and references, but not '" <> show t <> "'") l >> stop
 
 --------------------------------------------------------------------------------
 
@@ -453,8 +454,14 @@ ldarg_ref     s = ByteCode (word8 0x10 <> word8 s) 2 0x00
 
 ldarga        s = ByteCode (word8 0x12 <> word8 s) 2 0x00
 
+starg_i8      s = ByteCode (word8 0x13 <> word8 s) 2 0x00
+starg_u8      s = ByteCode (word8 0x13 <> word8 s) 2 0x00
+starg_i16     s = ByteCode (word8 0x13 <> word8 s) 2 0x00
+starg_u16     s = ByteCode (word8 0x13 <> word8 s) 2 0x00
 starg_i32     s = ByteCode (word8 0x13 <> word8 s) 2 0x00
+starg_u32     s = ByteCode (word8 0x13 <> word8 s) 2 0x00
 starg_i64     s = ByteCode (word8 0x14 <> word8 s) 2 0x00
+starg_u64     s = ByteCode (word8 0x14 <> word8 s) 2 0x00
 starg_f32     s = ByteCode (word8 0x13 <> word8 s) 2 0x00
 starg_f64     s = ByteCode (word8 0x14 <> word8 s) 2 0x00
 starg_ref     s = ByteCode (word8 0x13 <> word8 s) 2 0x00
@@ -473,8 +480,14 @@ ldloc_ref     s = ByteCode (word8 0x10 <> word8 s) 2 0x00
 
 ldloca        s = ByteCode (word8 0x12 <> word8 s) 2 0x00
 
+stloc_i8      s = ByteCode (word8 0x13 <> word8 s) 2 0x00
+stloc_u8      s = ByteCode (word8 0x13 <> word8 s) 2 0x00
+stloc_i16     s = ByteCode (word8 0x13 <> word8 s) 2 0x00
+stloc_u16     s = ByteCode (word8 0x13 <> word8 s) 2 0x00
 stloc_i32     s = ByteCode (word8 0x13 <> word8 s) 2 0x00
+stloc_u32     s = ByteCode (word8 0x13 <> word8 s) 2 0x00
 stloc_i64     s = ByteCode (word8 0x14 <> word8 s) 2 0x00
+stloc_u64     s = ByteCode (word8 0x14 <> word8 s) 2 0x00
 stloc_f32     s = ByteCode (word8 0x13 <> word8 s) 2 0x00
 stloc_f64     s = ByteCode (word8 0x14 <> word8 s) 2 0x00
 stloc_ref     s = ByteCode (word8 0x13 <> word8 s) 2 0x00
