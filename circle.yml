@@ -1,0 +1,10 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: haskell:8.2
+    steps:
+      - checkout
+      - run: cabal update
+      - run: cabal install --only-dependencies
+      - run: cabal build
