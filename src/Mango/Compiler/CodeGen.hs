@@ -359,7 +359,7 @@ select5 _ ReferenceTypeSymbol {} _ _ _ _ ref = return ref
 select5 l t                      _ _ _ _ _   = reportIf True ("Instruction supports i32, i64, f32, f64, and references, but not '" <> show t <> "'") l >> stop
 
 select11 :: Location -> TypeSymbol -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> Compiler a
-select11 _ BoolTypeSymbol         i8  _ _ _ _ _ _ _ _ _ _ = return i8
+select11 _ BoolTypeSymbol         _ _ _ _ u8  _ _ _ _ _ _ = return u8
 select11 _ Int8TypeSymbol         i8  _ _ _ _ _ _ _ _ _ _ = return i8
 select11 _ Int16TypeSymbol        _ i16 _ _ _ _ _ _ _ _ _ = return i16
 select11 _ Int32TypeSymbol        _ _ i32 _ _ _ _ _ _ _ _ = return i32
